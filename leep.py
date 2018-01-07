@@ -22,16 +22,16 @@ ERROR="ERROR"
 def open(addr, **kws):
     """Access to a single LEEP Device.
     
-    :param str addr: Device Address.  prefix with "pv://<prefix>" or "leep://<ip>[:<port>]"
+    :param str addr: Device Address.  prefix with "ca://<prefix>" or "leep://<ip>[:<port>]"
     """
-    if addr.startswith('pv://'):
+    if addr.startswith('ca://'):
         if caget is None:
-            raise RuntimeError('pv:// not available, cothread module not in PYTHONPATH')
+            raise RuntimeError('ca:// not available, cothread module not in PYTHONPATH')
         return CADevice(addr[5:], **kws)
     elif addr.startswith('leep://'):
         return LEEPDevice(addr[7:], **kws)
     else:
-        raise ValueError("Unknown '%s' must begin with pv:// or leep://"%addr)
+        raise ValueError("Unknown '%s' must begin with ca:// or leep://"%addr)
 
 class RegName(object):
     """Helper for building heirarchial names
