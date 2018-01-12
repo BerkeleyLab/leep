@@ -2,16 +2,17 @@
 import logging
 _log = logging.getLogger(__name__)
 
-import json, zlib
+import json, zlib, re
 
 import numpy
 
 caget = caput = camonitor = None
 try:
     from cothread.catools import caget, caput, camonitor, FORMAT_TIME
-    from cothread import Event
 except ImportError:
     pass
+else:
+    from cothread import Event
 
 
 # flags for _wait_acq
@@ -33,62 +34,93 @@ def open(addr, **kws):
     else:
         raise ValueError("Unknown '%s' must begin with ca:// or leep://"%addr)
 
-class RegName(object):
-    """Helper for building heirarchial names
-    
-    >>> reg = RegName('base')
-    >>> str(reg[0]['foo'])
-    'base_0_foo'
-    """
-    def __init__(self, name=None, parts=None):
-        if parts is not None:
-            self._parts = parts
-        else:
-            self._parts = [] if name is None else [name]
-    def __str__(self):
-        return '_'.join(map(str,self._parts))
-    def __repr__(self):
-        return 'RegName(%s)'%self._parts
-    def __getitem__(self, part):
-        return self.__class__(parts=self._parts+[part])
+class AcquireBase(object):
+    def close(self):
+        pass
+    def inc_tag(self):
+        pass
+    def wait(self, tag=WARN):
+        pass
 
-class Base(object):
+    def __enter__(self):
+        return self
+    def __exit__(self, A, B, C):
+        self.close()
 
-    def reg_write(self, name, value):
-        "Write single register"
-        assert value is not None, value
-        self.reg_batch([(name, value)])
+class DeviceBase(object):
+    def __init__(self, instance=[]):
+        self.instance = instance[:] # shallow copy
 
-    def reg_read(self, name):
-        "Read single register"
-        return self.reg_batch([(name, None)])[0]
+    def expand_regname(self, name, instance=[]):
+        """Return a full register name from the short name and optionally instance number(s)
 
-    def reg_batch(self, cmds):
-        """Batch read/write operations.
-        
-        :param list cmd: List of tuples [("regname", value|None)].  None triggers read.
-        :returns list: List of value (for reads) or None (writes)
+        >>> D.expand_regname('XXX', instance=[0])
+        'tget_0_delay_pc_XXX'
         """
-        # squash RegName into string
-        cmds = [(str(name), value) for name,value in cmds]
-        return self._reg_batch(cmds)
+        # build a regexp
+        # TODO: cheating a little bit, should enforce a '_' between instance parts
+        I = r'.*'.join(map(lambda x:re.escape(str(x)), self.instance + instance))
+        R = re.compile('^.*%s.*%s$'%(I, name))
 
-    def set_tgen(self, tbl, instance=0):
+        ret = None
+        for reg in self.regmap:
+            if R.match(reg) is not None
+                if ret is not None:
+                    raise RuntimeError('%s %s Matched more than one register %s, %s'%(name, I, ret, reg))
+                ret = reg
+        return ret
+
+    def reg_write(self, ops, instance=[]):
+        """
+        >>> D.reg_write([
+            ('reg_a', 5),
+            ('reg_b', 6),
+        ])
+        """
+        raise NotImplementedError
+
+    def reg_read(self, names, instance=[]):
+        """
+        >>> A, B = D.reg_read(['reg_a', 'reg_b'])
+        """
+        raise NotImplementedError
+
+    def get_reg_info(self, name, instance=[]):
+        """Return a dict describing the named register.
+        """
+        return self.regmap[self.expand_regname(name, instance=instance)]
+
+    def set_tgen(self, tbl, instance=[]):
         """Load waveform to PRC tgen
         
         Provided tbl must be an Nx3 array
         of delay (in ticks) and 2x levels (I/Q in counts).
         First delay must be zero.
+
+        >>> D.set_tgen([
+            (0 , 100, 0), # time zero, I=100, Q=0
+            (50, 0, 0)    # time 50, I=0, Q=0
+        ])
+
+        The XXX sequencer runs "programs" of writes.
+        Each instruction is stored in 4 words/addresses.
+
+        [0] Delay (applied _after_ write)
+        [1] Address to write
+        [2] value high word (16-bits)
+        [3] value low word (16-bits)
         """
+        tbl = numpy.asarray(tbl)
         _log.debug("tgen input table %s", tbl)
         assert tbl.shape[1]==3, tbl.shape
 
         assert tbl[0,0]==0, ('Table must start with delay 0', tbl[0,0])
+        # delay is applied after the write
         tbl[:-1,0] = tbl[1:,0]
         tbl[-1,0] = 0
 
-        info = self.get_reg_info(RegName('shell')[instance]['dsp_fdbk_core_mp_proc_lim'])
-        assert info['addr_width'] >= 2, info
+        info = self.get_reg_info('proc_lim')
+        assert info['addr_width'] == 2, info
         # lim has 4 addresses to set bounds on X and Y (aka. I and Q)
         # when high==low the output will be forced to the limit
         # aka. feedforward
@@ -98,8 +130,7 @@ class Base(object):
         lim_X_lo = lim_X_hi + 2
         lim_Y_lo = lim_X_hi + 3
 
-        XXX = RegName('tgen')[instance]['delay_pc_XXX']
-        info = self.get_reg_info(XXX)
+        info = self.get_reg_info('XXX')
 
         prg = numpy.zeros(2**info['addr_width'], dtype='u4')
 
@@ -139,15 +170,21 @@ class Base(object):
         prg[idx+3] = 0
         idx += 4
 
-        for i in range(0, idx, 4):
-            print "INST", prg[i+0], prg[i+1], prg[i+2], prg[i+3]
+        #for i in range(0, idx, 4):
+        #    print "INST", prg[i+0], prg[i+1], prg[i+2], prg[i+3]
 
         _log.debug("XXX program %s", prg[:idx])
-        self.reg_write(XXX, prg)
+        self.reg_write(('XXX', prg))
 
-class CADevice(Base):
-    def __init__(self, addr, timeout=1.0):
-        Base.__init__(self)
+    def acquire(self):
+        """Setup for acquisition.  Returns an AcquireBase
+        which can be used to wait for an acquisition to complete.
+        """
+        raise NotImplementedError
+
+class CADevice(DeviceBase):
+    def __init__(self, addr, timeout=1.0, **kws):
+        DeviceBase.__init__(self, **kws)
         self.timeout = timeout
         self.prefix = addr # PV prefix
 
@@ -164,39 +201,36 @@ class CADevice(Base):
         # raw JSON blob from device
         # {'reg_name:{'base_addr':0, ...}}
         _log.debug('caget("%s")', addr+'ctrl:JSON-I')
-        self._regs = json.loads(zlib.decompress(caget(addr+'ctrl:JSON-I')))
+        self.regmap = json.loads(zlib.decompress(caget(addr+'ctrl:JSON-I')))
 
     def pv_write(self, suffix, value):
+        """Shortcut for operations which don't map naturally to registers
+        when going through an IOC
+        """
         _log.debug('caput("%s", %s)', self.prefix+suffix, value)
         caput(self.prefix+suffix, value, wait=True, timeout=self.timeout)
 
-    def get_reg_info(self, name):
-        return self._regs[str(name)]
+    def reg_write(self, ops, instance=[]):
+        for name, value in ops:
+            name = self.expand_regname(name, instance=instance)
+            pvname = str(info['output'])
+            _log.debug('caput("%s", %s)', pvname, value)
+            caput(pvname, value, wait=True, timeout=self.timeout)
 
-    def _reg_batch(self, cmds):
-        ret = []
-        for name, value in cmds:
-            try:
-                info = self._info[name]
-            except ValueError:
-                raise ValueError("Unknown register '%s'"%name)
+    def reg_read(self, names, instance=[]):
+        ret = [None]*len(names)
+        for i, name in enumerate(names):
+            name = self.expand_regname(name, instance=instance)
+            pvname = str(info['input'])
 
-            if value is None:
-                pvname = str(info['input'])
-                _log.debug('caput("%s.PROC", 1)', pvname)
-                caput(pvname+'.PROC', 1, wait=True, timeout=self.timeout)
-                value = caget(pvname, timeout=self.timeout)
-                _log.debug('caget("%s") -> %s', pvname, value)
+            _log.debug('caput("%s.PROC", 1)', pvname)
+            caput(pvname+'.PROC', 1, wait=True, timeout=self.timeout)
+            ret[i] = caget(pvname, timeout=self.timeout)
+            _log.debug('caget("%s") -> %s', pvname, value)
 
-            else:
-                pvname = str(info['output'])
-                _log.debug('caput("%s", %s)', pvname, value)
-                caput(pvname, value, wait=True, timeout=self.timeout)
-
-            ret.append(value)
         return ret
 
-    class CAAcq(object):
+    class CAAcq(AcquireBase):
         def __init__(self, dev, prefix):
             # prefix should be "shell_X"
             self._dev, self._prefix = dev, prefix
@@ -222,11 +256,6 @@ class CADevice(Base):
                 self.S1.close()
                 self.S2.close()
                 self.S1 = self.S2 = None
-
-        def __enter__(self):
-            return self
-        def __exit__(self, A, B, C):
-            self.close()
 
         def _new_circle(self, value):
             _log.debug("Update circle")
@@ -301,5 +330,128 @@ class CADevice(Base):
         return self.CAAcq(self, RegName('shell')[instance])
 
 
-class LEEPDevice(Base):
-    pass
+
+class LEEPDevice(DeviceBase):
+    def __init__(self, addr, timeout=0, **kws):
+        DeviceBase.__init__(self, **kws)
+        host, _sep, port = addr.partition(':')
+        self.dest = (host, int(port or '50006'))
+
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
+        self.sock.settimeout(timeout)
+
+        self._readrom()
+
+    def _exchange(self, addrs, values=None):
+
+        pad = None
+        if len(addrs)<3:
+            pad = 3-len(addrs)
+            addrs.extend([0]*pad)
+            values.extend([None]*pad)
+
+        msg = numpy.zeros(2+2*len(addrs), dtype=be32)
+        msg[0] = random.randint(0,0xffffffff)
+        msg[1] = msg[0]&0xffffffff
+
+        for i,(A, V) in enumerate(zip(addrs, values), 1):
+            A &= 0x00ffffff
+            if V is None:
+                A |= 0x10000000
+            msg[2*i] = A
+            msg[2*i+1] = V or 0
+
+        tosend = msg.tostring()
+        _log.debug("%s Send (%d) %s", self.dest, len(tosend), repr(tosend))
+        self.sock.sendto(tosend, self.dest)
+
+        while True:
+            reply, src = self.sock.recvfrom(1024)
+            _log.debug("%s Recv (%d) %s", src, len(reply), repr(reply))
+
+            if len(reply)%8:
+                reply = reply[:-(len(reply)%8)]
+
+            if len(tosend)!=len(reply):
+                _log.error("Reply truncated %d %d", len(tosend), len(reply))
+                continue
+
+            reply = numpy.fromstring(reply, be32)
+            if (msg[:2]!=reply[:2]).any():
+                _log.error('Ignore reply w/o matching nonce %s %s', msg[:2], reply[:2])
+                continue
+            elif (msg[2::2]!=reply[2::2]).any():
+                _log.error('reply addresses are out of order')
+                continue
+
+            break
+
+        ret = reply[3::2]
+        if pad:
+            ret = ret[:-pad]
+        return ret
+
+    def exchange(self, addrs, values=None):
+        """Accepts a list of address and values (None to read).
+        Returns a numpy.ndarray in the same order.
+        """
+
+        if values is None:
+            values = [None]*len(addrs)
+
+        ret = numpy.zeros(len(addrs), be32)
+        for i in range(0, len(addrs), 127):
+            A, B = addrs[i:i+127], values[i:i+127]
+
+            P = self._exchange(A, B)
+            ret[i:i+127] = P
+
+        return ret
+
+    def _readrom(self):
+        self.descript = None
+        self.codehash = None
+        self.jsonhash = None
+        self.json = None
+
+        values = self.exchange(range(0x800, 0x1000))
+
+        values = numpy.frombuffer(values, be16)
+        _log.debug("ROM[0] %08x", values[0])
+        values = values[1::2] # discard upper bytes
+
+        while len(values):
+            type = values[0]>>14
+            size = values[0]&0x3fff
+            _log.debug("ROM Descriptor type=%d size=%d", type, size)
+
+            if type==0:
+                break
+
+            blob, values = values[1:size+1], values[size+1:]
+            if len(blob)!=size:
+                raise ValueError("Truncated ROM Descriptor")
+
+            if type==1:
+                blob = blob.tostring()
+                if self.descript is None:
+                    self.descript = blob
+                else:
+                    _log.info("Extra ROM Text '%s'", blob)
+            elif type==2:
+                blob = ''.join(["%04x"%b for b in blob])
+                if self.jsonhash is None:
+                    self.jsonhash = blob
+                elif self.codehash is None:
+                    self.codehash = blob
+                else:
+                    _log.info("Extra ROM Hash %s", blob)
+
+            elif type==3:
+                if self.json is not None:
+                    _log.error("Ignoring additional JSON blob in ROM")
+                else:
+                    self.json = json.loads(zlib.decompress(blob.tostring()).decode('ascii'))
+
+        if self.json is None:
+            raise RuntimeError('ROM contains no JSON')
