@@ -8,6 +8,10 @@ import sys, os, socket, random, zlib, json
 
 from .base import DeviceBase, AcquireBase, IGNORE, WARN, ERROR
 
+import numpy
+
+be32 = numpy.dtype('>u4')
+be16 = numpy.dtype('>u2')
 
 class LEEPDevice(DeviceBase):
     def __init__(self, addr, timeout=0, **kws):
@@ -79,7 +83,7 @@ class LEEPDevice(DeviceBase):
 
         msg = numpy.zeros(2+2*len(addrs), dtype=be32)
         msg[0] = random.randint(0,0xffffffff)
-        msg[1] = msg[0]&0xffffffff
+        msg[1] = msg[0]^0xffffffff
 
         for i,(A, V) in enumerate(zip(addrs, values), 1):
             A &= 0x00ffffff
