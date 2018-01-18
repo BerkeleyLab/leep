@@ -10,12 +10,20 @@ from .base import DeviceBase, IGNORE, WARN, ERROR
 
 caget = caput = camonitor = None
 try:
-    from cothread.catools import caget, caput, camonitor, FORMAT_TIME, DBR_CHAR_STR
+    from cothread.catools import caget as _caget, caput as _caput, camonitor, FORMAT_TIME, DBR_CHAR_STR
 except ImportError:
     pass
 else:
     from cothread import Event
 
+def caget(*args, **kws):
+    R = _caget(*args, **kws)
+    _log.debug('caget(%s, %s) -> %s'%(args, kws, R))
+    return R
+
+def caput(*args, **kws):
+    _log.debug('caput(%s, %s'%(args, kws))
+    _caput(*args, **kws)
 
 class CADevice(DeviceBase):
     backend = 'ca'
@@ -25,7 +33,6 @@ class CADevice(DeviceBase):
         self.timeout = timeout
         self.prefix = addr # PV prefix
 
-        _log.debug('caget("%s")', addr+'ctrl:JInfo-I')
         # fetch mapping from register name to info dict
         # {'records':{'reg_name':{'<info>':'<value>'}}}
         # common info tags are:
@@ -37,7 +44,6 @@ class CADevice(DeviceBase):
 
         # raw JSON blob from device
         # {'reg_name:{'base_addr':0, ...}}
-        _log.debug('caget("%s")', addr+'ctrl:JSON-I')
         self.regmap = json.loads(zlib.decompress(caget(addr+'ctrl:JSON-I')))
 
         self._S = None
@@ -53,8 +59,17 @@ class CADevice(DeviceBase):
         """Shortcut for operations which don't map naturally to registers
         when going through an IOC
         """
-        _log.debug('caput("%s", %s)', self.prefix+suffix, value)
-        caput(self.prefix+suffix, value, wait=True, timeout=self.timeout)
+        # hack, detect how many format specs are present
+        N, I=0, 0
+        while True:
+            I = suffix.find('%', I)
+            if I==-1:
+                break
+            I+=1
+            N+=1
+
+        name = str(self.prefix + (suffix%tuple(self.instance[:N])))
+        caput(name, value, wait=True, timeout=self.timeout)
 
     def reg_write(self, ops, instance=[]):
         for name, value in ops:
@@ -62,7 +77,6 @@ class CADevice(DeviceBase):
                 name = self.expand_regname(name, instance=instance)
             info = self._info[name]
             pvname = str(info['output'])
-            _log.debug('caput("%s", %s)', pvname, value)
             caput(pvname, value, wait=True, timeout=self.timeout)
 
     def reg_read(self, names, instance=[]):
@@ -73,7 +87,6 @@ class CADevice(DeviceBase):
             info = self._info[name]
             pvname = str(info['input'])
 
-            _log.debug('caput("%s.PROC", 1)', pvname)
             caput(pvname+'.PROC', 1, wait=True, timeout=self.timeout)
             # force as unsigned
             ret[i] = caget(pvname, timeout=self.timeout)
@@ -81,7 +94,6 @@ class CADevice(DeviceBase):
             info = self.regmap[name]
             if info.get('sign', 'unsigned')=='unsigned':
                 ret[i] &= (2**info['data_width'])-1
-            _log.debug('caget("%s") -> %s', pvname, ret[i])
 
         return ret
 
@@ -103,9 +115,13 @@ class CADevice(DeviceBase):
         # assume that the shell_#_ number is the first
 
         chans = set(chans)
-        caput(['%sacq:dev%s:ch%d:Ena-Sel'%(self.prefix, I[0], ch) for ch in range(12)],
-              ['Enable' if ch in chans else 'Disable' for ch in range(12)],
-              wait=True)
+        disable = set(range(12)) - chans
+        # enable/disable for even/odd channels are actually aliases
+        # so disable first, then enable
+        if disable:
+            caput(['%sacq:dev%s:ch%d:Ena-Sel'%(self.prefix, I[0], ch) for ch in disable], 'Disable', wait=True)
+        if chans:
+            caput(['%sacq:dev%s:ch%d:Ena-Sel'%(self.prefix, I[0], ch) for ch in chans], 'Enable', wait=True)
 
     def wait_for_acq(self, tag=False, timeout=5.0, instance=[]):
         """Wait for next waveform acquisition to complete.
