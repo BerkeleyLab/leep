@@ -30,14 +30,13 @@ def open(addr, **kws):
     else:
         raise ValueError("Unknown '%s' must begin with ca:// or leep://"%addr)
 
-class AcquireBase(object):
-    def __init__(self, device):
-        self.device = device
+class DeviceBase(object):
+    backend = None # 'ca' or 'leep'
+
+    def __init__(self, instance=[]):
+        self.instance = instance[:] # shallow copy
+
     def close(self):
-        pass
-    def inc_tag(self):
-        pass
-    def wait(self, tag=WARN):
         pass
 
     def __enter__(self):
@@ -45,11 +44,6 @@ class AcquireBase(object):
     def __exit__(self, A, B, C):
         self.close()
 
-class DeviceBase(object):
-    backend = None # 'ca' or 'leep'
-
-    def __init__(self, instance=[]):
-        self.instance = instance[:] # shallow copy
 
     def expand_regname(self, name, instance=[]):
         """Return a full register name from the short name and optionally instance number(s)
@@ -83,6 +77,7 @@ class DeviceBase(object):
 
     def reg_read(self, names, instance=[]):
         """
+        :returns: A :py:class:`numpy.ndarray` for each register name.
         >>> A, B = D.reg_read(['reg_a', 'reg_b'])
         """
         raise NotImplementedError
@@ -93,6 +88,25 @@ class DeviceBase(object):
         if instance is not None:
             name = self.expand_regname(name, instance=instance)
         return self.regmap[name]
+
+    def set_channel_mask(self, chans=None, instance=[]):
+        """Enabled specified channels.
+        chans may be a bit mask or a list of channel numbers
+        """
+        pass
+
+    def wait_for_acq(self, tag=False, timeout=5.0, instance=[]):
+        """Wait for next waveform acquisition to complete.
+        If tag=True, then wait for the next acquisition which includes the
+        side-effects of all preceding register writes
+        """
+        pass
+
+    def get_channels(self, chans=[], instance=[]):
+        """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
+        chans may be a bit mask or a list of channel numbers
+        """
+        pass
 
     def set_tgen(self, tbl, instance=[]):
         """Load waveform to RFS tgen
@@ -179,9 +193,3 @@ class DeviceBase(object):
 
         _log.debug("XXX program %s", prg[:idx])
         self.reg_write(('XXX', prg))
-
-    def acquire(self):
-        """Setup for acquisition.  Returns an AcquireBase
-        which can be used to wait for an acquisition to complete.
-        """
-        raise NotImplementedError

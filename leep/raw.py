@@ -4,7 +4,7 @@ from __future__ import print_function
 import logging
 _log = logging.getLogger(__name__)
 
-import sys, os, socket, random, zlib, json
+import sys, os, socket, random, zlib, json, time
 
 from .base import DeviceBase, AcquireBase, IGNORE, WARN, ERROR
 
@@ -83,8 +83,90 @@ class LEEPDevice(DeviceBase):
 
         return ret
 
-    def acquire(self):
-        pass
+    def set_channel_mask(self, chans=[], instance=[]):
+        """Enabled specified channels.
+        """
+        # list of channel numbers to mask
+        chans = reduce(lambda l,r: l|r, [2**(12-n) for n in chans], 0)
+
+        self.reg_write([('chan_keep', chans)], instance=instance)
+
+    def wait_for_acq(self, tag=False, timeout=5.0, instance=[]):
+        """Wait for next waveform acquisition to complete.
+        If tag=True, then wait for the next acquisition which includes the
+        side-effects of all preceding register writes
+        """
+        start = time.time()
+
+        if tag:
+            T, = (self.reg_read(['dsp_tag'], instance=instance)+1)&0xffff
+            self.reg_write([('dsp_tag', T)], instance=instance)
+            _log.debug('Set Tag %d', T)
+
+        I = self.instance + instance
+        # assume that the shell_#_ number is the first
+        mask = 2**int(I[0])
+
+        while True:
+            self.reg_write([('circle_buf_flip', mask)], instance=None)
+
+            while True:
+                now = time.time()
+                if now-start >= timeout:
+                    raise RuntimeError('Timeout')
+
+                # TODO: use exchange() and optimize to fetch slow_data[33] as well
+                ready, = self.reg_read(['llrf_circle_ready'], instance=None)
+
+                if ready&mask:
+                    break
+
+            if not tag:
+                break
+
+            slow, = self.reg_read(['slow_data'], instance=instance)
+            dT = (slow[33] - T) & 0xffff
+            if dT >= 0:
+                if dT>0:
+                    _log.warn('acquisition collides with another client')
+                break # all done
+            # retry
+
+    def get_channels(self, chans=[], instance=[]):
+        """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
+        chans may be a bit mask or a list of channel numbers
+        """
+        interested = reduce(lambda l,r: l|r, [2**(12-n) for n in chans], 0)
+
+        keep, data = self.reg_read([
+            'chan_keep',
+            'circle_data',
+        ], instance=instance)
+
+        if (keep & interested) != chans:
+            # chans must be a strict sub-set of keep
+            raise RuntimeError('Requested channels (%x) not kept (%x)'%(chans, keep))
+
+        # count number of bits set
+        nbits, M = 0, mask
+        while M!=0:
+            if M&1:
+                nbits += 1
+            M >>= 1
+
+        cdata = {}
+        M = 0
+        for ch in range(12):
+            cmask = 2**(12-ch)
+            if not (keep & cmask):
+                continue
+            if interested & cmake:
+                cdata[ch] = data[M:nbits:]
+
+            M += 1
+
+        # finally, ensure the results are in the same order as args
+        return list([cdata[ch] for ch in chans])
 
     def _exchange(self, addrs, values=None):
         """Exchange a single low level message
@@ -203,10 +285,3 @@ class LEEPDevice(DeviceBase):
 
         if self.regmap is None:
             raise RuntimeError('ROM contains no JSON')
-
-    class RawAcq(AcquireBase):
-        def __init__(self, dev):
-            pass
-
-    def acquire(self):
-        return self.RawAcq(self)

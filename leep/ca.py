@@ -40,6 +40,15 @@ class CADevice(DeviceBase):
         _log.debug('caget("%s")', addr+'ctrl:JSON-I')
         self.regmap = json.loads(zlib.decompress(caget(addr+'ctrl:JSON-I')))
 
+        self._S = None
+        self._S_pv = None
+        self._E = Event()
+
+    def close(self):
+        if self._S is not None:
+            self._S.close()
+            self._S = None
+
     def pv_write(self, suffix, value):
         """Shortcut for operations which don't map naturally to registers
         when going through an IOC
@@ -86,94 +95,60 @@ class CADevice(DeviceBase):
     def jsonhash(self):
         return '<not implemented>'
 
-    class CAAcq(AcquireBase):
-        def __init__(self, dev, prefix):
-            # prefix should be "shell_X"
-            self._dev, self._prefix = dev, prefix
-            self.tag = None
-            self._wait = Event()
-
-            circle_reg = str(prefix["circle_data"])
-            slow_reg = str(prefix["slow_data"])
-
-            circle_pv = str(self._dev._info[circle_reg]['rawinput'])
-            slow_pv = str(self._dev._info[slow_reg]['rawinput'])
-
-            # cache initially empty
-            self._circle = self._slow = None
-
-            _log.debug('camonitor("%s") start', circle_pv)
-            self.S1 = camonitor(circle_pv, self._new_circle, format=FORMAT_TIME)
-            _log.debug('camonitor("%s") start', slow_pv)
-            self.S2 = camonitor(slow_pv, self._new_slow, format=FORMAT_TIME)
-
-        def close(self):
-            if self.S1 is not None:
-                self.S1.close()
-                self.S2.close()
-                self.S1 = self.S2 = None
-
-        def _new_circle(self, value):
-            _log.debug("Update circle")
-            self._circle = value
-            self._check_done()
-
-        def _new_slow(self, value):
-            _log.debug("Update slow")
-            self._slow = value
-            self._check_done()
-
-        def _check_done(self):
-            if self._slow is None or self._circle is None:
-                _log.debug('Acq %s cache not ready', self._prefix)
-                return
-            #elif self._slow.raw_stamp != self._circle.raw_stamp:
-            elif abs(self._slow.timestamp - self._circle.timestamp)<0.001:
-                _log.debug('Acq %s cache old %s != %s', self._prefix, self._slow.timestamp, self._circle.timestamp)
-                if self._slow.raw_stamp < self._circle.raw_stamp:
-                    self._slow = None
-                else:
-                    self._circle = None
-                return
-            else:
-                _log.debug('Acq %s cache ready', self._prefix)
-                self._wait.Signal({'circle':self._circle, 'slow':self._slow})
-                self._circle = self._slow = None
-
-        def wait(self, tag=WARN, tag_at_end=True, timeout=10.0):
-            expect = self.tag
-            _log.debug("Wait for acquisition w/ tag=%s check %s", expect, tag)
-            while True:
-                ret = self._wait.Wait(timeout=timeout)
-                slow = ret['slow']
-                Tb, Te = slow[33], slow[34]
-
-                if Tb<expect:
-                    continue
-
-                if Te<expect and tag_at_end:
-                    continue
-
-                if Te!=expect:
-                    if tag!=IGNORE:
-                        _log.debug("End tag early %d < %d", Te, expect)
-                    if tag==ERROR:
-                        continue
-
-                _log.debug("Acquisition complete start=%d end=%d", Tb, Te)
-                return ret
-
-        def inc_tag(self):
-            tagreg = str(self._prefix['dsp']['tag'])
-            info = self._dev._info[tagreg]
-            incpv = str(info['increment'])
-            _log.debug('caput("%s", 1)', incpv)
-            caput(incpv, 1, wait=True, timeout=self._dev.timeout)
-            self.tag = self._dev.reg_read(tagreg)
-            _log.debug("Acquisition tag now %s", self.tag)
-            return self.tag
-
-    def acquire(self, instance=0):
-        """Setup for acquisition
+    def set_channel_mask(self, chans=None, instance=[]):
+        """Enabled specified channels.
+        chans may be a bit mask or a list of channel numbers
         """
-        return self.CAAcq(self, 'shell_%d_'%instance)
+        I = self.instance + instance
+        # assume that the shell_#_ number is the first
+
+        chans = set(chans)
+        caput(['%sacq:dev%d:ch%d:Ena-Sel'%(self.prefix, I[0], ch) for ch in range(12)],
+              ['Enable' if ch in chans else 'Disable' for ch in range(12)],
+              wait=True)
+
+    def wait_for_acq(self, tag=False, timeout=5.0, instance=[]):
+        """Wait for next waveform acquisition to complete.
+        If tag=True, then wait for the next acquisition which includes the
+        side-effects of all preceding register writes
+        """
+        I = self.instance + instance
+        # assume that the shell_#_ number is the first
+
+        if tag:
+            # subscribe to last tag to get updates only when a new tag comes into effect
+            pv = '%sacq:dev%d:Tag2-I'%(self.prefix, I[0])
+            # increment tag
+            caput('%sacq:dev%d:TagInc-Cmd'%(self.prefix, I[0]), 1, wait=True)
+            old = caget('%sacq:dev%d:Tag-RB'%(self.prefix, I[0]))
+
+        else:
+            # subscribe to acquisition counter to get all updates
+            pv = '%sacq:dev%d:AcqCnt-I'%(self.prefix, I[0])
+
+        if self._S_pv != pv:
+            self.close()
+
+            self._S = camonitor(pv, self._E.Signal, format=FORMAT_TIME)
+            # wait for initial update
+            self._S.Wait(timeout=timeout)
+
+            self._S_pv = pv
+
+        else:
+            self._S.Reset()
+
+        while True:
+            V = self._S.Wait(timeout=timeout)
+
+            dT = (V - old)%0xffff
+
+            if not tag or dT>=0:
+                break
+
+    def get_channels(self, chans=[], instance=[]):
+        """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
+        chans may be a bit mask or a list of channel numbers
+        """
+        I = self.instance + instance
+        return caget(['%sacq:dev%d:ch%d:I-I'%(self,prefix, I[0], ch) for ch in chans])
