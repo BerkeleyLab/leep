@@ -17,6 +17,7 @@ def open(addr, **kws):
     :param str addr: Device Address.  prefix with "ca://<prefix>" or "leep://<ip>[:<port>]"
     """
     if addr.startswith('ca://'):
+        from cothread.catools import caget
         if caget is None:
             raise RuntimeError('ca:// not available, cothread module not in PYTHONPATH')
         from .ca import CADevice
@@ -45,6 +46,8 @@ class AcquireBase(object):
         self.close()
 
 class DeviceBase(object):
+    backend = None # 'ca' or 'leep'
+
     def __init__(self, instance=[]):
         self.instance = instance[:] # shallow copy
 
@@ -61,10 +64,12 @@ class DeviceBase(object):
 
         ret = None
         for reg in self.regmap:
-            if R.match(reg) is not None
+            if R.match(reg) is not None:
                 if ret is not None:
                     raise RuntimeError('%s %s Matched more than one register %s, %s'%(name, I, ret, reg))
                 ret = reg
+        if ret is None:
+            raise RuntimeError('No match for register pattern %s'%R.pattern)
         return ret
 
     def reg_write(self, ops, instance=[]):
@@ -85,10 +90,12 @@ class DeviceBase(object):
     def get_reg_info(self, name, instance=[]):
         """Return a dict describing the named register.
         """
-        return self.regmap[self.expand_regname(name, instance=instance)]
+        if instance is not None:
+            name = self.expand_regname(name, instance=instance)
+        return self.regmap[name]
 
     def set_tgen(self, tbl, instance=[]):
-        """Load waveform to PRC tgen
+        """Load waveform to RFS tgen
         
         Provided tbl must be an Nx3 array
         of delay (in ticks) and 2x levels (I/Q in counts).

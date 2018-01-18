@@ -2,11 +2,15 @@
 import logging
 _log = logging.getLogger(__name__)
 
+import json, zlib
+
+import numpy
+
 from .base import DeviceBase, AcquireBase, IGNORE, WARN, ERROR
 
 caget = caput = camonitor = None
 try:
-    from cothread.catools import caget, caput, camonitor, FORMAT_TIME
+    from cothread.catools import caget, caput, camonitor, FORMAT_TIME, DBR_CHAR_STR
 except ImportError:
     pass
 else:
@@ -14,6 +18,8 @@ else:
 
 
 class CADevice(DeviceBase):
+    backend = 'ca'
+
     def __init__(self, addr, timeout=1.0, **kws):
         DeviceBase.__init__(self, **kws)
         self.timeout = timeout
@@ -43,7 +49,9 @@ class CADevice(DeviceBase):
 
     def reg_write(self, ops, instance=[]):
         for name, value in ops:
-            name = self.expand_regname(name, instance=instance)
+            if instance is not None:
+                name = self.expand_regname(name, instance=instance)
+            info = self._info[name]
             pvname = str(info['output'])
             _log.debug('caput("%s", %s)', pvname, value)
             caput(pvname, value, wait=True, timeout=self.timeout)
@@ -51,15 +59,32 @@ class CADevice(DeviceBase):
     def reg_read(self, names, instance=[]):
         ret = [None]*len(names)
         for i, name in enumerate(names):
-            name = self.expand_regname(name, instance=instance)
+            if instance is not None:
+                name = self.expand_regname(name, instance=instance)
+            info = self._info[name]
             pvname = str(info['input'])
 
             _log.debug('caput("%s.PROC", 1)', pvname)
             caput(pvname+'.PROC', 1, wait=True, timeout=self.timeout)
+            # force as unsigned
             ret[i] = caget(pvname, timeout=self.timeout)
-            _log.debug('caget("%s") -> %s', pvname, value)
+            # cope with lack of unsigned in CA
+            info = self.regmap[name]
+            if info.get('sign', 'unsigned')=='unsigned':
+                ret[i] &= (2**info['data_width'])-1
+            _log.debug('caget("%s") -> %s', pvname, ret[i])
 
         return ret
+
+    @property
+    def descript(self):
+        return caget(str(self.prefix+'ctrl:Desc-I'), datatype=DBR_CHAR_STR)
+    @property
+    def codehash(self):
+        return caget(str(self.prefix+'ctrl:CodeHash-I'), datatype=DBR_CHAR_STR)
+    @property
+    def jsonhash(self):
+        return '<not implemented>'
 
     class CAAcq(AcquireBase):
         def __init__(self, dev, prefix):

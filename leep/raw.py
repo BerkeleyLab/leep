@@ -14,7 +14,9 @@ be32 = numpy.dtype('>u4')
 be16 = numpy.dtype('>u2')
 
 class LEEPDevice(DeviceBase):
-    def __init__(self, addr, timeout=0, **kws):
+    backend = 'leep'
+
+    def __init__(self, addr, timeout=0.1, **kws):
         DeviceBase.__init__(self, **kws)
         host, _sep, port = addr.partition(':')
         self.dest = (host, int(port or '50006'))
@@ -27,8 +29,9 @@ class LEEPDevice(DeviceBase):
     def reg_write(self, ops, instance=[]):
         addrs, values = [], []
         for name, value in ops:
-            name = self.expand_regname(name, instance=instance)
-            info = self.get_reg_info(name)
+            if instance is not None:
+                name = self.expand_regname(name, instance=instance)
+            info = self.get_reg_info(name, instance=None)
             L = 2**info.get('addr_width', 0)
 
             if L > 1:
@@ -50,21 +53,32 @@ class LEEPDevice(DeviceBase):
         addrs = []
         lens = []
         for name in names:
-            name = self.expand_regname(name, instance=instance)
-            info = self.get_reg_info(name)
+            if instance is not None:
+                name = self.expand_regname(name, instance=instance)
+            info = self.get_reg_info(name, instance=None)
             L = 2**info.get('addr_width', 0)
 
-            lens.append(L)
+            lens.append((info, L))
             addrs.extend(range(info['base_addr'], info['base_addr']+L))
-
-        addrs  = numpy.asarray(addrs)
 
         raw = self.exchange(addrs)
 
         ret = []
-        for L in lens:
-            data, ret = raw[:L], raw[L:]
+        for info, L in lens:
+            data, raw = raw[:L], raw[L:]
             assert len(data)==L, (len(data), L)
+            if info.get('sign', 'unsigned')=='signed':
+                # sign extend
+                # mask of data bits excluding sign bit
+                mask = (2**(info['data_width']-1))-1
+                # invert to give mask of sign bit and extension bits
+                mask ^= 0xffffffff
+                # test sign bit
+                neg = (data & mask)!=0
+                # extend only negative numbers
+                data[neg] |= mask
+                # cast to signed
+                data = data.astype('i4')
             ret.append(data)
 
         return ret
@@ -126,9 +140,12 @@ class LEEPDevice(DeviceBase):
         """Accepts a list of address and values (None to read).
         Returns a numpy.ndarray in the same order.
         """
+        addrs = list(addrs)
 
         if values is None:
             values = [None]*len(addrs)
+        else:
+            values = list(values)
 
         ret = numpy.zeros(len(addrs), be32)
         for i in range(0, len(addrs), 127):
@@ -143,7 +160,7 @@ class LEEPDevice(DeviceBase):
         self.descript = None
         self.codehash = None
         self.jsonhash = None
-        self.json = None
+        self.regmap = None
 
         values = self.exchange(range(0x800, 0x1000))
 
@@ -179,12 +196,12 @@ class LEEPDevice(DeviceBase):
                     _log.info("Extra ROM Hash %s", blob)
 
             elif type==3:
-                if self.json is not None:
+                if self.regmap is not None:
                     _log.error("Ignoring additional JSON blob in ROM")
                 else:
-                    self.json = json.loads(zlib.decompress(blob.tostring()).decode('ascii'))
+                    self.regmap = json.loads(zlib.decompress(blob.tostring()).decode('ascii'))
 
-        if self.json is None:
+        if self.regmap is None:
             raise RuntimeError('ROM contains no JSON')
 
     class RawAcq(AcquireBase):
