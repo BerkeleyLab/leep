@@ -14,9 +14,9 @@ def readwrite(args, dev):
     for pair in args.reg:
         name, _eq, val = pair.partition('=')
         if len(val):
-            dev.reg_write([(name, int(val, 0))], instance=args.inst)
+            dev.reg_write([(name, int(val, 0))])
         else:
-            value, = dev.reg_read((name,), instance=args.inst)
+            value, = dev.reg_read((name,))
             print("%s \t%08x"%(name, value))
 
 
@@ -25,6 +25,12 @@ def listreg(args, dev):
     regs.sort()
     for reg in regs:
         print(reg)
+
+def acquire(args, dev):
+    dev.set_channel_mask(args.channels)
+    dev.wait_for_acq(tag=args.tag)
+    for ch in dev.get_channels(args.channels):
+        print(ch)
 
 def dumpaddrs(args, dev):
     regs = []
@@ -108,14 +114,20 @@ def getargs():
     P.add_argument('-q','--quiet',action='store_const', const=logging.WARN, dest='debug')
     P.add_argument('-l','--list', action='store_true', help='List register names')
     P.add_argument('-t','--timeout', type=float, default=1.0)
+    P.add_argument('-i','--inst', action='append', default=[])
     P.add_argument('dest', metavar="URI", help="Server address.  ca://Prefix or leep://host[:port]")
 
     SP = P.add_subparsers()
 
     S = SP.add_parser('reg', help='read/write registers')
     S.set_defaults(func=readwrite)
-    S.add_argument('-i','--inst', action='append', default=[])
     S.add_argument('reg', nargs='+', help="register[=newvalue]")
+
+    S = SP.add_parser('acquire', help='Waveform acquisition')
+    S.set_defaults(func=acquire)
+    S.add_argument('-t','--tag', action='store_true', default=False,
+                   help='Increment tag and wait for acquisition w/ new tag')
+    S.add_argument('channels', nargs='+', type=int, help='Channel numbers')
 
     S = SP.add_parser('list', help='list registers')
     S.set_defaults(func=listreg)
@@ -137,7 +149,7 @@ def getargs():
 def main():
     args = getargs()
     logging.basicConfig(level=args.debug)
-    dev = open(args.dest)
+    dev = open(args.dest, instance=args.inst)
     args.func(args, dev)
 
 if __name__=='__main__':

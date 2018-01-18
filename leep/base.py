@@ -53,14 +53,17 @@ class DeviceBase(object):
         """
         # build a regexp
         # TODO: cheating a little bit, should enforce a '_' between instance parts
-        I = r'.*'.join(map(lambda x:re.escape(str(x)), self.instance + instance))
-        R = re.compile('^.*%s.*%s$'%(I, name))
+        I = r'.*'.join(['_%s_'%re.escape(str(x)) for x in self.instance + instance])
+        R = re.compile('^.*%s(?:.*_)?%s$'%(I, name))
 
         ret = None
         for reg in self.regmap:
-            if R.match(reg) is not None:
+            if reg==name:
+                return name
+
+            elif R.match(reg) is not None:
                 if ret is not None:
-                    raise RuntimeError('%s %s Matched more than one register %s, %s'%(name, I, ret, reg))
+                    raise RuntimeError('%s %s Matched more than one register %s, %s matches %s'%(name, I, ret, reg, R.pattern))
                 ret = reg
         if ret is None:
             raise RuntimeError('No match for register pattern %s'%R.pattern)

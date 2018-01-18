@@ -6,12 +6,36 @@ _log = logging.getLogger(__name__)
 
 import sys, os, socket, random, zlib, json, time
 
-from .base import DeviceBase, AcquireBase, IGNORE, WARN, ERROR
+from .base import DeviceBase, IGNORE, WARN, ERROR
 
 import numpy
 
 be32 = numpy.dtype('>u4')
 be16 = numpy.dtype('>u2')
+
+def yscale(wave_samp_per=1):
+    try:
+        from math import ceil, log
+
+        lo_cheat = (74694*1.646760258)/2**17
+
+        shift_base = 4
+        cic_period=33
+        cic_n = wave_samp_per * cic_period
+
+        def log2(n):
+            try:
+                return log(n,2)
+            except ValueError as e:
+                raise ValueError("log2(%s) %s"%(n,e))
+
+        shift_min = log2(cic_n**2 * lo_cheat)-12
+
+        wave_shift = max(0, ceil(shift_min/2))
+
+        return wave_shift, 16 * lo_cheat * (33 * wave_samp_per)**2 * 4**(8 - wave_shift)/512.0/(2**shift_base)
+    except Exception as e:
+        raise RuntimeError("yscale(%s) %s"%(wave_samp_per, e))
 
 class LEEPDevice(DeviceBase):
     backend = 'leep'
@@ -79,6 +103,9 @@ class LEEPDevice(DeviceBase):
                 data[neg] |= mask
                 # cast to signed
                 data = data.astype('i4')
+            # unwrap scalar from ndarray
+            if info.get('addr_width',0)==0:
+                data = data[0]
             ret.append(data)
 
         return ret
@@ -87,7 +114,7 @@ class LEEPDevice(DeviceBase):
         """Enabled specified channels.
         """
         # list of channel numbers to mask
-        chans = reduce(lambda l,r: l|r, [2**(12-n) for n in chans], 0)
+        chans = reduce(lambda l,r: l|r, [2**(11-n) for n in chans], 0)
 
         self.reg_write([('chan_keep', chans)], instance=instance)
 
@@ -99,7 +126,7 @@ class LEEPDevice(DeviceBase):
         start = time.time()
 
         if tag:
-            T, = (self.reg_read(['dsp_tag'], instance=instance)+1)&0xffff
+            T = (self.reg_read(['dsp_tag'], instance=instance)[0]+1)&0xffff
             self.reg_write([('dsp_tag', T)], instance=instance)
             _log.debug('Set Tag %d', T)
 
@@ -136,32 +163,36 @@ class LEEPDevice(DeviceBase):
         """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
         chans may be a bit mask or a list of channel numbers
         """
-        interested = reduce(lambda l,r: l|r, [2**(12-n) for n in chans], 0)
+        interested = reduce(lambda l,r: l|r, [2**(11-n) for n in chans], 0)
 
-        keep, data = self.reg_read([
+        keep, data, dec = self.reg_read([
             'chan_keep',
             'circle_data',
+            'wave_samp_per',
         ], instance=instance)
 
-        if (keep & interested) != chans:
+        wave_shift, Ymax = yscale(dec)
+        # assume wave_shift has been set properly
+        assert Ymax!=0, dec
+
+        if (keep & interested) != interested:
             # chans must be a strict sub-set of keep
-            raise RuntimeError('Requested channels (%x) not kept (%x)'%(chans, keep))
+            raise RuntimeError('Requested channels (%x) not kept (%x)'%(interested, keep))
 
         # count number of bits set
-        nbits, M = 0, mask
+        nbits, M = 0, keep
         while M!=0:
             if M&1:
                 nbits += 1
             M >>= 1
 
-        cdata = {}
-        M = 0
+        cdata, M = {}, 0
         for ch in range(12):
-            cmask = 2**(12-ch)
+            cmask = 2**(11-ch)
             if not (keep & cmask):
                 continue
-            if interested & cmake:
-                cdata[ch] = data[M:nbits:]
+            if interested & cmask:
+                cdata[ch] = data[M::nbits]/Ymax
 
             M += 1
 

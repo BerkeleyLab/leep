@@ -6,7 +6,7 @@ import json, zlib
 
 import numpy
 
-from .base import DeviceBase, AcquireBase, IGNORE, WARN, ERROR
+from .base import DeviceBase, IGNORE, WARN, ERROR
 
 caget = caput = camonitor = None
 try:
@@ -103,7 +103,7 @@ class CADevice(DeviceBase):
         # assume that the shell_#_ number is the first
 
         chans = set(chans)
-        caput(['%sacq:dev%d:ch%d:Ena-Sel'%(self.prefix, I[0], ch) for ch in range(12)],
+        caput(['%sacq:dev%s:ch%d:Ena-Sel'%(self.prefix, I[0], ch) for ch in range(12)],
               ['Enable' if ch in chans else 'Disable' for ch in range(12)],
               wait=True)
 
@@ -117,33 +117,36 @@ class CADevice(DeviceBase):
 
         if tag:
             # subscribe to last tag to get updates only when a new tag comes into effect
-            pv = '%sacq:dev%d:Tag2-I'%(self.prefix, I[0])
+            pv = '%sacq:dev%s:Tag2-I'%(self.prefix, I[0])
             # increment tag
-            caput('%sacq:dev%d:TagInc-Cmd'%(self.prefix, I[0]), 1, wait=True)
-            old = caget('%sacq:dev%d:Tag-RB'%(self.prefix, I[0]))
+            caput('%sacq:dev%s:TagInc-Cmd'%(self.prefix, I[0]), 1, wait=True)
+            old = caget('%sacq:dev%s:Tag-RB'%(self.prefix, I[0]))
 
         else:
             # subscribe to acquisition counter to get all updates
-            pv = '%sacq:dev%d:AcqCnt-I'%(self.prefix, I[0])
+            pv = '%sacq:dev%s:AcqCnt-I'%(self.prefix, I[0])
 
         if self._S_pv != pv:
-            self.close()
+            if self._S is not None:
+                self._S.close()
+            self._E.Reset()
 
             self._S = camonitor(pv, self._E.Signal, format=FORMAT_TIME)
-            # wait for initial update
-            self._S.Wait(timeout=timeout)
+            # wait for, and consume, initial update
+            self._E.Wait(timeout=timeout)
 
             self._S_pv = pv
 
         else:
-            self._S.Reset()
+            self._E.Reset()
 
         while True:
-            V = self._S.Wait(timeout=timeout)
+            V = self._E.Wait(timeout=timeout)
 
+            if not tag:
+                break
             dT = (V - old)%0xffff
-
-            if not tag or dT>=0:
+            if dT>=0:
                 break
 
     def get_channels(self, chans=[], instance=[]):
@@ -151,4 +154,4 @@ class CADevice(DeviceBase):
         chans may be a bit mask or a list of channel numbers
         """
         I = self.instance + instance
-        return caget(['%sacq:dev%d:ch%d:I-I'%(self,prefix, I[0], ch) for ch in chans])
+        return caget(['%sacq:dev%s:ch%d:I-I'%(self.prefix, I[0], ch) for ch in chans])
