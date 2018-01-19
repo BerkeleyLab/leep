@@ -68,13 +68,14 @@ class DeviceBase(object):
         >>> D.expand_regname('XXX', instance=[0])
         'tget_0_delay_pc_XXX'
         """
+
+        if name in self.regmap:
+            return name
+
         # build a regexp
         I = self.instance + instance + [name]
         I = r'_(?:.*_)?'.join([re.escape(str(i)) for i in I])
         R = re.compile('^.*%s$'%I)
-
-        if name in self.regmap:
-            return name
 
         ret = filter(R.match, self.regmap)
         if len(ret)==1:
@@ -240,12 +241,12 @@ class DeviceBase(object):
                     assert delay>=0, inst
                     if len(ret)<4:
                         raise RuntimeError('sleep must follow a set')
+                    elif ret[-4]!=0:
+                        raise RuntimeError('sleep must not follow sleep')
                     elif delay==0:
                         continue
                     elif delay>0xffff:
                         raise RuntimeError('sleep delay too long, must be <=0xffff')
-                    elif ret[-4]!=0:
-                        raise RuntimeError('sleep must not follow sleep')
 
                     # set delay of previous instruction
                     ret[-4] = delay
@@ -265,89 +266,3 @@ class DeviceBase(object):
         self.reg_write([
             ('XXX', val),
         ], instance=instance)
-
-    def set_tgen(self, tbl, instance=[]):
-        """Load waveform to RFS tgen
-        
-        Provided tbl must be an Nx3 array
-        of delay (in ticks) and 2x levels (I/Q in counts).
-        First delay must be zero.
-
-        >>> D.set_tgen([
-            (0 , 100, 0), # time zero, I=100, Q=0
-            (50, 0, 0)    # time 50, I=0, Q=0
-        ])
-
-        The XXX sequencer runs "programs" of writes.
-        Each instruction is stored in 4 words/addresses.
-
-        [0] Delay (applied _after_ write)
-        [1] Address to write
-        [2] value high word (16-bits)
-        [3] value low word (16-bits)
-        """
-        tbl = numpy.asarray(tbl)
-        _log.debug("tgen input table %s", tbl)
-        assert tbl.shape[1]==3, tbl.shape
-
-        assert tbl[0,0]==0, ('Table must start with delay 0', tbl[0,0])
-        # delay is applied after the write
-        tbl[:-1,0] = tbl[1:,0]
-        tbl[-1,0] = 0
-
-        info = self.get_reg_info('proc_lim')
-        assert info['addr_width'] == 2, info
-        # lim has 4 addresses to set bounds on X and Y (aka. I and Q)
-        # when high==low the output will be forced to the limit
-        # aka. feedforward
-
-        lim_X_hi = info['base_addr']
-        lim_Y_hi = lim_X_hi + 1
-        lim_X_lo = lim_X_hi + 2
-        lim_Y_lo = lim_X_hi + 3
-
-        info = self.get_reg_info('XXX')
-
-        prg = numpy.zeros(2**info['addr_width'], dtype='u4')
-
-        T, idx = 0, 0
-        for i in range(tbl.shape[0]):
-            delay, X, Y = tbl[i,:]
-            delay -= T
-            assert delay>=0, (i, delay)
-            # delay 0 is really 4 ticks
-            # so delay is offset by 4.
-            # Delay applied _after_ write
-
-            prg[idx+0] = 0
-            prg[idx+1] = lim_X_lo
-            prg[idx+2] = X>>16
-            prg[idx+3] = X&0xffff
-            prg[idx+4] = 0
-            prg[idx+5] = lim_X_hi
-            prg[idx+6] = X>>16
-            prg[idx+7] = X&0xffff
-            idx += 8
-
-            prg[idx+0] = 0
-            prg[idx+1] = lim_Y_lo
-            prg[idx+2] = Y>>16
-            prg[idx+3] = Y&0xffff
-            prg[idx+4] = delay
-            prg[idx+5] = lim_Y_hi
-            prg[idx+6] = Y>>16
-            prg[idx+7] = Y&0xffff
-            idx += 8
-
-        # address zero ends sequence
-        prg[idx+0] = 0
-        prg[idx+1] = 0
-        prg[idx+2] = 0
-        prg[idx+3] = 0
-        idx += 4
-
-        #for i in range(0, idx, 4):
-        #    print "INST", prg[i+0], prg[i+1], prg[i+2], prg[i+3]
-
-        _log.debug("XXX program %s", prg[:idx])
-        self.reg_write(('XXX', prg))
