@@ -13,8 +13,24 @@ ERROR="ERROR"
 
 def open(addr, **kws):
     """Access to a single LEEP Device.
-    
-    :param str addr: Device Address.  prefix with "ca://<prefix>" or "leep://<ip>[:<port>]"
+
+    Device addresses take the form of "ca://<prefix>" or "leep://<ip>[:<port>]".
+
+    "ca://" addresses take a Process Variable (PV) name prefix string.
+
+    "leep://" addresses are a hostname or IP address, with an optional port number.
+
+    >>> from leep import open
+    >>> dev = open('leep://localhost')
+
+    or
+
+    >>> dev = open('ca://TST:')
+
+    :param str addr: Device Address.
+    :param float timeout: Communications timeout.
+    :param list instance: List of instance identifiers.
+    :returns: :py:class:`base.DeviceBase`
     """
     if addr.startswith('ca://'):
         try:
@@ -69,7 +85,13 @@ class DeviceBase(object):
             raise RuntimeError('No match for register pattern %s'%R.pattern)
 
     def reg_write(self, ops, instance=[]):
-        """
+        """Write to registers.
+
+        :param list ops: A list of tuples of register name and value.
+        :param list instance: List of instance identifiers.
+
+        Register names are expanded using self.instance and the instance lists.
+
         >>> D.reg_write([
             ('reg_a', 5),
             ('reg_b', 6),
@@ -78,14 +100,32 @@ class DeviceBase(object):
         raise NotImplementedError
 
     def reg_read(self, names, instance=[]):
-        """
+        """Read from registers.
+
+        :param list names: A list of register names.
+        :param list instance: List of instance identifiers.
         :returns: A :py:class:`numpy.ndarray` for each register name.
+
         >>> A, B = D.reg_read(['reg_a', 'reg_b'])
         """
         raise NotImplementedError
 
     def get_reg_info(self, name, instance=[]):
         """Return a dict describing the named register.
+        This dictionary is passed through from the information read from the device ROM.
+
+        Common dict keys are:
+
+        * access
+        * base_addr
+        * addr_width
+        * data_width
+        * sign
+        * description
+
+        :param str name: A register name
+        :param list instance: List of instance identifiers.
+        :returns: A dict with string keys.
         """
         if instance is not None:
             name = self.expand_regname(name, instance=instance)
@@ -93,22 +133,39 @@ class DeviceBase(object):
 
     def set_channel_mask(self, chans=None, instance=[]):
         """Enabled specified channels.
-        chans may be a bit mask or a list of channel numbers
+        chans may be a bit mask or a list of channel numbers (zero indexed).
+
+        :param list chans: A list of channel integer numbers (zero indexed).
+        :param list instance: List of instance identifiers.
         """
-        pass
+        raise NotImplementedError
 
     def wait_for_acq(self, tag=False, timeout=5.0, instance=[]):
         """Wait for next waveform acquisition to complete.
         If tag=True, then wait for the next acquisition which includes the
         side-effects of all preceding register writes
+
+        ;param bool tag: Whether to use the tag mechanism to wait for a update
+        :param float timeout: How long to wait for an acquisition.  Seperate from the communications timeout.
+        :param list instance: List of instance identifiers.
         """
-        pass
+        raise NotImplementedError
 
     def get_channels(self, chans=[], instance=[]):
         """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
-        chans may be a bit mask or a list of channel numbers
+        chans may be a bit mask or a list of channel numbers.
+
+        The returned arrays have been scaled.
         """
-        pass
+        raise NotImplementedError
+
+    def get_timebase(self, instance=[]):
+        """Return an array of times for each sample returned by :py:meth:`get_channels`.
+
+        Note that this timebase may be one sample longer than some data arrays
+        when the number of channels selected is not a power of 2.
+        """
+        raise NotImplementedError
 
     def set_tgen(self, tbl, instance=[]):
         """Load waveform to RFS tgen
