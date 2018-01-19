@@ -17,9 +17,10 @@ def open(addr, **kws):
     :param str addr: Device Address.  prefix with "ca://<prefix>" or "leep://<ip>[:<port>]"
     """
     if addr.startswith('ca://'):
-        from cothread.catools import caget
-        if caget is None:
-            raise RuntimeError('ca:// not available, cothread module not in PYTHONPATH')
+        try:
+            from cothread.catools import caget
+        except ImportError:
+            raise RuntimeError('ca:// not available, cothread module not found in PYTHONPATH')
         from .ca import CADevice
         return CADevice(addr[5:], **kws)
 
@@ -52,22 +53,20 @@ class DeviceBase(object):
         'tget_0_delay_pc_XXX'
         """
         # build a regexp
-        # TODO: cheating a little bit, should enforce a '_' between instance parts
-        I = r'.*'.join(['_%s_'%re.escape(str(x)) for x in self.instance + instance])
-        R = re.compile('^.*%s(?:.*_)?%s$'%(I, name))
+        I = self.instance + instance + [name]
+        I = r'_(?:.*_)?'.join([re.escape(str(i)) for i in I])
+        R = re.compile('^.*%s$'%I)
 
-        ret = None
-        for reg in self.regmap:
-            if reg==name:
-                return name
+        if name in self.regmap:
+            return name
 
-            elif R.match(reg) is not None:
-                if ret is not None:
-                    raise RuntimeError('%s %s Matched more than one register %s, %s matches %s'%(name, I, ret, reg, R.pattern))
-                ret = reg
-        if ret is None:
+        ret = filter(R.match, self.regmap)
+        if len(ret)==1:
+            return ret[0]
+        elif len(ret)>1:
+            raise RuntimeError('%s Matches more than one register: %s'%(R.pattern, ' '.join(ret)))
+        else:
             raise RuntimeError('No match for register pattern %s'%R.pattern)
-        return ret
 
     def reg_write(self, ops, instance=[]):
         """
