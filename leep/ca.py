@@ -171,3 +171,7 @@ class CADevice(DeviceBase):
         """
         I = self.instance + instance
         return caget(['%sacq:dev%s:ch%d:I-I'%(self.prefix, I[0], ch) for ch in chans])
+
+    def get_timebase(self, chans=[], instance=[]):
+        I = self.instance + instance
+        return caget(['%sacq:dev%s:ch%d:T-I'%(self.prefix, I[0], ch) for ch in chans])

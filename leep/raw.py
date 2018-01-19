@@ -199,6 +199,9 @@ class LEEPDevice(DeviceBase):
         # finally, ensure the results are in the same order as args
         return list([cdata[ch] for ch in chans])
 
+#    def get_timebase(self, chans=[], instance=[]):
+#        pass
+
     def _exchange(self, addrs, values=None):
         """Exchange a single low level message
         """

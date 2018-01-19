@@ -159,12 +159,15 @@ class DeviceBase(object):
         """
         raise NotImplementedError
 
-    def get_timebase(self, instance=[]):
+    def get_timebase(self, chans=[], instance=[]):
         """Return an array of times for each sample returned by :py:meth:`get_channels`.
 
-        Note that this timebase may be one sample longer than some data arrays
-        when the number of channels selected is not a power of 2.
+        Note that the number of samples may be different for some channels
+        if the number of selected channels is not a power of two.
         """
+        raise NotImplementedError
+
+    def set_decimate(self, dec):
         raise NotImplementedError
 
     def assemble_xxx(self, prog, instance=[]):
