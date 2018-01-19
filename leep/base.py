@@ -167,6 +167,102 @@ class DeviceBase(object):
         """
         raise NotImplementedError
 
+    def assemble_xxx(self, prog, instance=[]):
+        """Build a "program" for the XXX sequencer.
+
+        Programs are lists of tuples.
+        Each tuple has the form ('set', 'register', value) or
+        ('sleep', delay).  For example:
+
+        >>> value = dev.assemble_xxx([
+            ('set', 'proc_lim[1]', 5000), # X_low
+            ('set', 'proc_lim[0]', 5000), # X_high
+            ('set', 'proc_lim[3]', 0), # Y_low
+            ('set', 'proc_lim[2]', 0), # Y_high
+            ('sleep', 1000),
+            ('set', 'proc_lim[1]', 0), # X_low
+            ('set', 'proc_lim[0]', 0), # X_high
+        ])
+
+        :param list prog: A list of instruction tuples
+        :returns: A value which can be passed to :py:meth:`reg_write`.
+        """
+
+        # The XXX sequencer runs "programs" of writes.
+        # Each instruction is stored in 4 words/addresses.
+        #
+        # [0] Delay (applied _after_ write)
+        # [1] Address to write
+        # [2] value high word (16-bits)
+        # [3] value low word (16-bits)
+
+        ret = []
+
+        for instn, inst in enumerate(prog):
+            try:
+                if inst[0]=='set':
+                    _inst, name, value = inst
+
+                    # eg.
+                    #  name
+                    #  name[offset]
+                    M = re.match(r'^([^\[\]]+)(?:\[(\d+)\])?$', name)
+                    if M is None:
+                        raise RuntimeError('malformed name')
+
+                    name, offset = M.groups()
+                    offset = int(offset or '0', 0)
+
+                    name = self.expand_regname(name, instance=instance)
+                    info = self.regmap[name]
+
+                    N = 2**info.get('addr_width', 0)
+                    if offset >= N:
+                        raise RuntimeError('offset out of bounds (%s < %s)'%(offset, N))
+
+                    addr = info['base_addr'] + offset
+
+                    #if addr > 0xffff:
+                    #       raise RuntimeError('XXX requires registers below 16-bit limit (%x)'%addr)
+
+                    ret.extend([
+                        0, # all delays start as zero
+                        addr,
+                        (value>>16)%0xffff,
+                        value%0xffff,
+                    ])
+
+                elif inst[0]=='sleep':
+                    _inst, delay = inst
+                    assert delay>=0, inst
+                    if len(ret)<4:
+                        raise RuntimeError('sleep must follow a set')
+                    elif delay==0:
+                        continue
+                    elif delay>0xffff:
+                        raise RuntimeError('sleep delay too long, must be <=0xffff')
+                    elif ret[-4]!=0:
+                        raise RuntimeError('sleep must not follow sleep')
+
+                    # set delay of previous instruction
+                    ret[-4] = delay
+
+                else:
+                    raise RuntimeError('Unknown instruction')
+
+            except Exception as e:
+                raise e.__class__('Instruction %d %s: %s'%(instn, inst, e))
+
+        return ret
+
+    def load_xxx(self, prog, instance=[]):
+        """Assemble and load program
+        """
+        val = self.assemble_xxx(prog, instance=instance)
+        self.reg_write([
+            ('XXX', val),
+        ], instance=instance)
+
     def set_tgen(self, tbl, instance=[]):
         """Load waveform to RFS tgen
         
