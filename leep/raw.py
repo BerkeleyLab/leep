@@ -263,7 +263,7 @@ class LEEPDevice(DeviceBase):
         else:
             values = list(values)
 
-        ret = numpy.zeros(len(addrs))
+        ret = numpy.zeros(len(addrs), be32)
         for i in range(0, len(addrs), 127):
             A, B = addrs[i:i+127], values[i:i+127]
 
