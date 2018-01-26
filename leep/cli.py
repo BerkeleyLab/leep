@@ -4,7 +4,7 @@ from __future__ import print_function
 import logging
 _log = logging.getLogger(__name__)
 
-import json, sys, tempfile, shutil
+import sys, json, sys, tempfile, shutil
 
 from collections import defaultdict
 
@@ -65,7 +65,19 @@ def dumpjson(args, dev):
     json.dump(dev.regmap, sys.stdout, indent=2)
     sys.stdout.write('\n')
 
+class MapDirect(object):
+    def __call__(self, name):
+        return 'reg:'+name
+
+class MapShort(object):
+    def __init__(self):
+        self._next = 0
+    def __call__(self, name):
+        N, self._next = self._next, self._next+1
+        return 'R%x'%N
+
 def gentemplate(args, dev):
+    mapper = MapShort() if args.short else MapDirect()
 
     files = defaultdict(list)
     for name, info in dev.regmap.items():
@@ -78,7 +90,7 @@ def gentemplate(args, dev):
         }
         values = {
             'name':name,
-            'pv':'reg:'+name, # TODO: apply naming convention here
+            'pv':mapper(name),
             'size':1<<info.get('addr_width',0),
         }
         values.update(info)
@@ -107,7 +119,11 @@ def gentemplate(args, dev):
         out.write('}\n\n')
 
     out.flush()
-    shutil.copyfile(out.name, args.output)
+    out.seek(0)
+    if args.output=='-':
+        sys.stdout.write(out.read())
+    else:
+        shutil.copyfile(out.name, args.output)
 
 def getargs():
     from argparse import ArgumentParser
@@ -143,6 +159,7 @@ def getargs():
     S = SP.add_parser('template', help='Generate MSI substitutions file')
     S.set_defaults(func=gentemplate)
     S.add_argument('output', help='Output file')
+    S.add_argument('--short', action='store_true', help='Generate shorter, but less meaningful PV names')
 
     return P.parse_args()
 
