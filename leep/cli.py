@@ -8,6 +8,8 @@ import sys, json, sys, tempfile, shutil
 
 from collections import defaultdict
 
+import numpy
+
 from . import open
 
 def readwrite(args, dev):
@@ -17,7 +19,10 @@ def readwrite(args, dev):
             dev.reg_write([(name, int(val, 0))])
         else:
             value, = dev.reg_read((name,))
-            print("%s \t%08x"%(name, value))
+            if isinstance(value, (list, numpy.ndarray)):
+                print("%s \t%08s"%(name, ' '.join(['%x'%v for v in value])))
+            else:
+                print("%s \t%08x"%(name, value))
 
 
 def listreg(args, dev):
