@@ -58,14 +58,18 @@ class LEEPDevice(DeviceBase):
             info = self.get_reg_info(name, instance=None)
             L = 2**info.get('addr_width', 0)
 
+            base_addr = info['base_addr']
+            if isinstance(base_addr, (bytes, unicode)):
+                base_addr = int(base_addr, 0)
+
             if L > 1:
                 assert len(value)==L, ('must write whole register', len(value), L)
                 # array register
-                for A, V in enumerate(value, info['base_addr']):
+                for A, V in enumerate(value, base_addr):
                     addrs.append(A)
                     values.append(V)
             else:
-                addrs.append(info['base_addr'])
+                addrs.append(base_addr)
                 values.append(value)
 
         addrs  = numpy.asarray(addrs)
@@ -83,7 +87,10 @@ class LEEPDevice(DeviceBase):
             L = 2**info.get('addr_width', 0)
 
             lens.append((info, L))
-            addrs.extend(range(info['base_addr'], info['base_addr']+L))
+            base_addr = info['base_addr']
+            if isinstance(base_addr, (bytes, unicode)):
+                base_addr = int(base_addr, 0)
+            addrs.extend(range(base_addr, base_addr+L))
 
         raw = self.exchange(addrs)
 
