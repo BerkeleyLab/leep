@@ -173,14 +173,14 @@ class DeviceBase(object):
     def set_decimate(self, dec):
         raise NotImplementedError
 
-    def assemble_xxx(self, prog, instance=[]):
-        """Build a "program" for the XXX sequencer.
+    def assemble_tgen(self, prog, instance=[]):
+        """Build a "program" for the TGEN sequencer.
 
         Programs are lists of tuples.
         Each tuple has the form ('set', 'register', value) or
         ('sleep', delay).  For example:
 
-        >>> value = dev.assemble_xxx([
+        >>> value = dev.assemble_tgen([
             ('set', 'proc_lim[1]', 5000), # X_low
             ('set', 'proc_lim[0]', 5000), # X_high
             ('set', 'proc_lim[3]', 0), # Y_low
@@ -259,12 +259,23 @@ class DeviceBase(object):
             except Exception as e:
                 raise e.__class__('Instruction %d %s: %s' % (instn, inst, e))
 
+        # End program with a "stop" command
+        info = self.get_reg_info('XXX', instance=instance)
+        maxcnt = 2**info['addr_width']
+        if len(ret) >= maxcnt:
+            raise RuntimeError('tget Sequence %d exceeds max %d' % (len(ret), maxcnt))
+        ret.extend([0]*(maxcnt-len(ret)))
+        assert len(ret) == maxcnt, (len(ret), maxcnt)
+        print ret
         return ret
 
-    def load_xxx(self, prog, instance=[]):
-        """Assemble and load program
+    def load_tgen(self, prog, instance=[]):
+        """Assemble and load TGEN program
         """
-        val = self.assemble_xxx(prog, instance=instance)
+        val = self.assemble_tgen(prog, instance=instance)
+        next, = self.reg_read(['bank_next'])
+
         self.reg_write([
             ('XXX', val),
+            ('bank_next', next ^ 1),
         ], instance=instance)
