@@ -4,7 +4,11 @@ from __future__ import print_function
 import logging
 _log = logging.getLogger(__name__)
 
-import sys, json, sys, tempfile, shutil
+import sys
+import json
+import sys
+import tempfile
+import shutil
 
 from collections import defaultdict
 
@@ -20,9 +24,9 @@ def readwrite(args, dev):
         else:
             value, = dev.reg_read((name,))
             if isinstance(value, (list, numpy.ndarray)):
-                print("%s \t%08s"%(name, ' '.join(['%x'%v for v in value])))
+                print("%s \t%08s" % (name, ' '.join(['%x' % v for v in value])))
             else:
-                print("%s \t%08x"%(name, value))
+                print("%s \t%08x" % (name, value))
 
 
 def listreg(args, dev):
@@ -33,16 +37,16 @@ def listreg(args, dev):
 
 def acquire(args, dev):
     dev.set_channel_mask(args.channels)
-    if dev.backend=='ca':
+    if dev.backend == 'ca':
         dev.pv_write('acq:dev%s:Mode-Sel', 'Normal')
     dev.wait_for_acq(tag=args.tag)
     for ch in dev.get_channels(args.channels):
-        print(' '.join(map(str,ch)))
+        print(' '.join(map(str, ch)))
 
 def dumpaddrs(args, dev):
     regs = []
     for reg, info in dev.regmap.items():
-        if 'r' in info.get('access',''):
+        if 'r' in info.get('access', ''):
             regs.append(reg)
 
     values = dev.reg_read(regs, instance=None)
@@ -50,7 +54,7 @@ def dumpaddrs(args, dev):
     for name, value in zip(regs, values):
         info = dev.get_reg_info(name, instance=None)
         base = info['base_addr']
-        if info.get('addr_width', 0)==0:
+        if info.get('addr_width', 0) == 0:
             # scalar
             addrs.append((base, value & 0xffffffff))
         else:
@@ -59,73 +63,76 @@ def dumpaddrs(args, dev):
                 addrs.append(pair)
 
     # sort by address increasing
-    addrs.sort(key=lambda pair:pair[0])
+    addrs.sort(key=lambda pair: pair[0])
 
     for addr, value in addrs:
-        if value==0 and args.ignore_zeros:
+        if value == 0 and args.ignore_zeros:
             continue
-        print("%08x %08x"%(addr, value))        
+        print("%08x %08x" % (addr, value))
 
 def dumpjson(args, dev):
     json.dump(dev.regmap, sys.stdout, indent=2)
     sys.stdout.write('\n')
 
 class MapDirect(object):
+
     def __call__(self, name):
         return 'reg:'+name
 
 class MapShort(object):
+
     def __init__(self):
         self._next = 0
+
     def __call__(self, name):
         N, self._next = self._next, self._next+1
-        return 'R%x'%N
+        return 'R%x' % N
 
 def gentemplate(args, dev):
     mapper = MapShort() if args.short else MapDirect()
 
     files = defaultdict(list)
     for name, info in dev.regmap.items():
-        if len(name)==0:
+        if len(name) == 0:
             _log.warn("Zero length register name")
             continue
         components = {
             'access': info.get('access', ''),
-            'type': 'scalar' if info.get('addr_width',0)==0 else 'array',
+            'type': 'scalar' if info.get('addr_width', 0) == 0 else 'array',
         }
         values = {
-            'name':name,
-            'pv':mapper(name),
-            'size':1<<info.get('addr_width',0),
+            'name': name,
+            'pv': mapper(name),
+            'size': 1 << info.get('addr_width', 0),
         }
         values.update(info)
 
-        name = 'feed_reg_%(access)s_%(type)s.template'%components
+        name = 'feed_reg_%(access)s_%(type)s.template' % components
 
         files[name].append(values)
 
     # sort to get stable output order
     files = list(files.items())
-    files.sort(key=lambda i:i[0])
+    files.sort(key=lambda i: i[0])
 
     out = tempfile.NamedTemporaryFile('r+')
-    out.write('# Generated from\n# FW: %s\n# JSON: %s\n# Code: %s\n\n'%(dev.descript, dev.jsonhash, dev.codehash))
+    out.write('# Generated from\n# FW: %s\n# JSON: %s\n# Code: %s\n\n' % (dev.descript, dev.jsonhash, dev.codehash))
 
     out.write('file "feed_base.template"\n{\n{PREF="$(P)ctrl:"}\n}\n\n')
 
     for fname, infos in files:
-        out.write('file "%s"\n{\n'%fname)
+        out.write('file "%s"\n{\n' % fname)
 
-        infos.sort(key=lambda i:i['pv'])
+        infos.sort(key=lambda i: i['pv'])
 
         for info in infos:
-            out.write('{PREF="$(P)%(pv)s",\tREG="%(name)s",\tSIZE="%(size)s"}\n'%info)
+            out.write('{PREF="$(P)%(pv)s",\tREG="%(name)s",\tSIZE="%(size)s"}\n' % info)
 
         out.write('}\n\n')
 
     out.flush()
     out.seek(0)
-    if args.output=='-':
+    if args.output == '-':
         sys.stdout.write(out.read())
     else:
         shutil.copyfile(out.name, args.output)
@@ -133,10 +140,10 @@ def gentemplate(args, dev):
 def getargs():
     from argparse import ArgumentParser
     P = ArgumentParser()
-    P.add_argument('-d','--debug',action='store_const', const=logging.DEBUG, default=logging.INFO)
-    P.add_argument('-q','--quiet',action='store_const', const=logging.WARN, dest='debug')
-    P.add_argument('-t','--timeout', type=float, default=1.0)
-    P.add_argument('-i','--inst', action='append', default=[])
+    P.add_argument('-d', '--debug', action='store_const', const=logging.DEBUG, default=logging.INFO)
+    P.add_argument('-q', '--quiet', action='store_const', const=logging.WARN, dest='debug')
+    P.add_argument('-t', '--timeout', type=float, default=1.0)
+    P.add_argument('-i', '--inst', action='append', default=[])
     P.add_argument('dest', metavar="URI", help="Server address.  ca://Prefix or leep://host[:port]")
 
     SP = P.add_subparsers()
@@ -147,7 +154,7 @@ def getargs():
 
     S = SP.add_parser('acquire', help='Waveform acquisition')
     S.set_defaults(func=acquire)
-    S.add_argument('-t','--tag', action='store_true', default=False,
+    S.add_argument('-t', '--tag', action='store_true', default=False,
                    help='Increment tag and wait for acquisition w/ new tag')
     S.add_argument('channels', nargs='+', type=int, help='Channel numbers')
 
@@ -155,7 +162,7 @@ def getargs():
     S.set_defaults(func=listreg)
 
     S = SP.add_parser('dump', help='dump registers')
-    S.add_argument('-Z','--ignore-zeros', action='store_true', help="Only print registers with non-zero values")
+    S.add_argument('-Z', '--ignore-zeros', action='store_true', help="Only print registers with non-zero values")
     S.set_defaults(func=dumpaddrs)
 
     S = SP.add_parser('json', help='print json')
@@ -175,5 +182,5 @@ def main():
     dev = open(args.dest, timeout=args.timeout, instance=args.inst)
     args.func(args, dev)
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main()

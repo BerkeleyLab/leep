@@ -2,14 +2,16 @@
 import logging
 _log = logging.getLogger(__name__)
 
-import json, zlib, re
+import json
+import zlib
+import re
 
 import numpy
 
 # flags for _wait_acq
-IGNORE="IGNORE"
-WARN="WARN"
-ERROR="ERROR"
+IGNORE = "IGNORE"
+WARN = "WARN"
+ERROR = "ERROR"
 
 def open(addr, **kws):
     """Access to a single LEEP Device.
@@ -45,22 +47,22 @@ def open(addr, **kws):
         return LEEPDevice(addr[7:], **kws)
 
     else:
-        raise ValueError("Unknown '%s' must begin with ca:// or leep://"%addr)
+        raise ValueError("Unknown '%s' must begin with ca:// or leep://" % addr)
 
 class DeviceBase(object):
-    backend = None # 'ca' or 'leep'
+    backend = None  # 'ca' or 'leep'
 
     def __init__(self, instance=[]):
-        self.instance = instance[:] # shallow copy
+        self.instance = instance[:]  # shallow copy
 
     def close(self):
         pass
 
     def __enter__(self):
         return self
+
     def __exit__(self, A, B, C):
         self.close()
-
 
     def expand_regname(self, name, instance=[]):
         """Return a full register name from the short name and optionally instance number(s)
@@ -75,15 +77,15 @@ class DeviceBase(object):
         # build a regexp
         I = self.instance + instance + [name]
         I = r'_(?:.*_)?'.join([re.escape(str(i)) for i in I])
-        R = re.compile('^.*%s$'%I)
+        R = re.compile('^.*%s$' % I)
 
         ret = filter(R.match, self.regmap)
-        if len(ret)==1:
+        if len(ret) == 1:
             return ret[0]
-        elif len(ret)>1:
-            raise RuntimeError('%s Matches more than one register: %s'%(R.pattern, ' '.join(ret)))
+        elif len(ret) > 1:
+            raise RuntimeError('%s Matches more than one register: %s' % (R.pattern, ' '.join(ret)))
         else:
-            raise RuntimeError('No match for register pattern %s'%R.pattern)
+            raise RuntimeError('No match for register pattern %s' % R.pattern)
 
     def reg_write(self, ops, instance=[]):
         """Write to registers.
@@ -204,7 +206,7 @@ class DeviceBase(object):
 
         for instn, inst in enumerate(prog):
             try:
-                if inst[0]=='set':
+                if inst[0] == 'set':
                     _inst, name, value = inst
 
                     # eg.
@@ -222,30 +224,30 @@ class DeviceBase(object):
 
                     N = 2**info.get('addr_width', 0)
                     if offset >= N:
-                        raise RuntimeError('offset out of bounds (%s < %s)'%(offset, N))
+                        raise RuntimeError('offset out of bounds (%s < %s)' % (offset, N))
 
                     addr = info['base_addr'] + offset
 
-                    #if addr > 0xffff:
+                    # if addr > 0xffff:
                     #       raise RuntimeError('XXX requires registers below 16-bit limit (%x)'%addr)
 
                     ret.extend([
-                        0, # all delays start as zero
+                        0,  # all delays start as zero
                         addr,
-                        (value>>16)%0xffff,
-                        value%0xffff,
+                        (value >> 16) % 0xffff,
+                        value % 0xffff,
                     ])
 
-                elif inst[0]=='sleep':
+                elif inst[0] == 'sleep':
                     _inst, delay = inst
-                    assert delay>=0, inst
-                    if len(ret)<4:
+                    assert delay >= 0, inst
+                    if len(ret) < 4:
                         raise RuntimeError('sleep must follow a set')
-                    elif ret[-4]!=0:
+                    elif ret[-4] != 0:
                         raise RuntimeError('sleep must not follow sleep')
-                    elif delay==0:
+                    elif delay == 0:
                         continue
-                    elif delay>0xffff:
+                    elif delay > 0xffff:
                         raise RuntimeError('sleep delay too long, must be <=0xffff')
 
                     # set delay of previous instruction
@@ -255,7 +257,7 @@ class DeviceBase(object):
                     raise RuntimeError('Unknown instruction')
 
             except Exception as e:
-                raise e.__class__('Instruction %d %s: %s'%(instn, inst, e))
+                raise e.__class__('Instruction %d %s: %s' % (instn, inst, e))
 
         return ret
 
