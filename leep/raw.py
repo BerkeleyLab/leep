@@ -57,6 +57,9 @@ class LEEPDevice(DeviceBase):
         self._readrom()
 
     def reg_write(self, ops, instance=[]):
+
+        assert isinstance(ops, (list, tuple))
+
         addrs, values = [], []
         for name, value in ops:
             if instance is not None:
@@ -69,12 +72,14 @@ class LEEPDevice(DeviceBase):
                 base_addr = int(base_addr, 0)
 
             if L > 1:
+                _log.info('reg_write %s <- %s ...', name, value[:10])
                 assert len(value) == L, ('must write whole register', len(value), L)
                 # array register
                 for A, V in enumerate(value, base_addr):
                     addrs.append(A)
                     values.append(V)
             else:
+                _log.info('reg_write %s <- %s', name, value)
                 addrs.append(base_addr)
                 values.append(value)
 
