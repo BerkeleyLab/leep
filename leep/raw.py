@@ -3,6 +3,9 @@ from __future__ import print_function
 
 import logging
 _log = logging.getLogger(__name__)
+# special logger for use in exchange()
+_spam = logging.getLogger(__name__+'.packets')
+_spam.propagate = False
 
 import sys
 import os
@@ -72,14 +75,14 @@ class LEEPDevice(DeviceBase):
                 base_addr = int(base_addr, 0)
 
             if L > 1:
-                _log.info('reg_write %s <- %s ...', name, value[:10])
+                _log.debug('reg_write %s <- %s ...', name, value[:10])
                 assert len(value) == L, ('must write whole register', len(value), L)
                 # array register
                 for A, V in enumerate(value, base_addr):
                     addrs.append(A)
                     values.append(V)
             else:
-                _log.info('reg_write %s <- %s', name, value)
+                _log.debug('reg_write %s <- %s', name, value)
                 addrs.append(base_addr)
                 values.append(value)
 
@@ -106,7 +109,7 @@ class LEEPDevice(DeviceBase):
         raw = self.exchange(addrs)
 
         ret = []
-        for info, L in lens:
+        for i,(info, L) in enumerate(lens):
             data, raw = raw[:L], raw[L:]
             assert len(data) == L, (len(data), L)
             if info.get('sign', 'unsigned') == 'signed':
@@ -121,6 +124,7 @@ class LEEPDevice(DeviceBase):
                 data[neg] |= mask
                 # cast to signed
                 data = data.astype('i4')
+            _log.debug('reg_read %s -> %s ...', names[i], data[:10])
             # unwrap scalar from ndarray
             if info.get('addr_width', 0) == 0:
                 data = data[0]
@@ -245,12 +249,12 @@ class LEEPDevice(DeviceBase):
             msg[2*i+1] = V or 0
 
         tosend = msg.tostring()
-        _log.debug("%s Send (%d) %s", self.dest, len(tosend), repr(tosend))
+        _spam.debug("%s Send (%d) %s", self.dest, len(tosend), repr(tosend))
         self.sock.sendto(tosend, self.dest)
 
         while True:
             reply, src = self.sock.recvfrom(1024)
-            _log.debug("%s Recv (%d) %s", src, len(reply), repr(reply))
+            _spam.debug("%s Recv (%d) %s", src, len(reply), repr(reply))
 
             if len(reply) % 8:
                 reply = reply[:-(len(reply) % 8)]
