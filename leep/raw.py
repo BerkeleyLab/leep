@@ -225,8 +225,31 @@ class LEEPDevice(DeviceBase):
         # finally, ensure the results are in the same order as args
         return list([cdata[ch] for ch in chans])
 
-#    def get_timebase(self, chans=[], instance=[]):
-#        pass
+    def get_timebase(self, chans=[], instance=[]):
+        info = self.get_reg_info('circle_data', instance=instance)
+        totalsamp = 2**info['addr_width']
+
+        keep, dec = self.reg_read([
+            'chan_keep',
+            'wave_samp_per',
+        ], instance=instance)
+
+        period = 2*33*dec/94.29e6
+
+        # count number of bits set
+        nbits, M = 0, keep
+        while M != 0:
+            if M & 1:
+                nbits += 1
+            M >>= 1
+
+        T = numpy.arange(1+totalsamp/nbits) * period
+
+        T = T.repeat(nbits) # [a, b, ...] w/ nbits=2 --> [a, a, b, b, ...]
+        assert len(T)>=totalsamp, (len(T), totalsamp)
+        T = T[:totalsamp]
+
+        return [T[i::nbits] for i in range(len(chans))]
 
     def _exchange(self, addrs, values=None):
         """Exchange a single low level message
