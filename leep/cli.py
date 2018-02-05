@@ -43,6 +43,9 @@ def acquire(args, dev):
     for ch in dev.get_channels(args.channels):
         print(' '.join(map(str, ch)))
 
+def decimate(args, dev):
+    dev.set_decimate(args.div)
+
 def dumpaddrs(args, dev):
     regs = []
     for reg, info in dev.regmap.items():
@@ -157,6 +160,10 @@ def getargs():
     S.add_argument('-t', '--tag', action='store_true', default=False,
                    help='Increment tag and wait for acquisition w/ new tag')
     S.add_argument('channels', nargs='+', type=int, help='Channel numbers')
+
+    S = SP.add_parser('decim', help='Set decimation')
+    S.add_argument('div', type=int, help='division factor [1, 255]')
+    S.set_defaults(func=decimate)
 
     S = SP.add_parser('list', help='list registers')
     S.set_defaults(func=listreg)

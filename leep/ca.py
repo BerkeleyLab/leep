@@ -66,7 +66,7 @@ class CADevice(DeviceBase):
             I = suffix.find('%', I)
             if I == -1:
                 break
-            I += 1
+            I += 1 # skip past found charactor
             N += 1
 
         name = str(self.prefix + (suffix % tuple(self.instance[:N])))
@@ -109,6 +109,10 @@ class CADevice(DeviceBase):
     @property
     def jsonhash(self):
         return '<not implemented>'
+
+    def set_decimate(self, dec):
+        assert dec>=1 and dec<=255
+        self.pv_write('acq:dev%s:Dec-SP', dec)
 
     def set_channel_mask(self, chans=None, instance=[]):
         """Enabled specified channels.

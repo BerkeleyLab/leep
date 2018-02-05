@@ -128,6 +128,10 @@ class LEEPDevice(DeviceBase):
 
         return ret
 
+    def set_decimate(self, dec, instance=[]):
+        assert dec>=1 and dec<=255
+        self.reg_write([('wave_samp_per', dec)], instance=instance)
+
     def set_channel_mask(self, chans=[], instance=[]):
         """Enabled specified channels.
         """
