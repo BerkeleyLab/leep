@@ -36,12 +36,22 @@ def listreg(args, dev):
         print(reg)
 
 def acquire(args, dev):
+    if args.plot:
+        from matplotlib import pylab
+        pylab.figure()
     dev.set_channel_mask(args.channels)
     if dev.backend == 'ca':
         dev.pv_write('acq:dev%s:Mode-Sel', 'Normal')
     dev.wait_for_acq(tag=args.tag)
-    for ch in dev.get_channels(args.channels):
-        print(' '.join(map(str, ch)))
+    for T,ch in zip(dev.get_timebase(args.channels),
+                    dev.get_channels(args.channels)):
+        if args.plot:
+            pylab.plot(T, ch)
+            pylab.hold(True)
+        else:
+            print(' '.join(map(str, ch)))
+    if args.plot:
+        pylab.show()
 
 def decimate(args, dev):
     dev.set_decimate(args.div)
@@ -159,6 +169,8 @@ def getargs():
     S.set_defaults(func=acquire)
     S.add_argument('-t', '--tag', action='store_true', default=False,
                    help='Increment tag and wait for acquisition w/ new tag')
+    S.add_argument('-P', '--plot', action='store_true', default=False,
+                   help='Plot acquired data with matplotlib')
     S.add_argument('channels', nargs='+', type=int, help='Channel numbers')
 
     S = SP.add_parser('decim', help='Set decimation')
