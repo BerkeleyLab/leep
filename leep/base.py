@@ -234,8 +234,8 @@ class DeviceBase(object):
                     ret.extend([
                         0,  # all delays start as zero
                         addr,
-                        (value >> 16) % 0xffff,
-                        value % 0xffff,
+                        (value >> 16) % 0x10000,
+                        value & 0xffff,
                     ])
 
                 elif inst[0] == 'sleep':
