@@ -259,14 +259,14 @@ class DeviceBase(object):
             except Exception as e:
                 raise e.__class__('Instruction %d %s: %s' % (instn, inst, e))
 
-        # End program with a "stop" command
+        # program must end with a "stop" command (set address zero)
         info = self.get_reg_info('XXX', instance=instance)
         maxcnt = 2**info['addr_width']
-        if len(ret) >= maxcnt:
-            raise RuntimeError('tget Sequence %d exceeds max %d' % (len(ret), maxcnt))
+        assert maxcnt>=4, info
+        if len(ret) > maxcnt-4:
+            raise RuntimeError('tget Sequence %d exceeds max %d' % (len(ret), maxcnt-4))
         ret.extend([0]*(maxcnt-len(ret)))
         assert len(ret) == maxcnt, (len(ret), maxcnt)
-        print ret
         return ret
 
     def load_tgen(self, prog, instance=[]):
