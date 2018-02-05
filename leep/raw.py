@@ -243,12 +243,17 @@ class LEEPDevice(DeviceBase):
                 nbits += 1
             M >>= 1
 
-        T = numpy.arange(1+totalsamp/nbits) * period
+        T = numpy.arange(1+totalsamp/nbits) * period  # result is often one sample too long
 
         T = T.repeat(nbits) # [a, b, ...] w/ nbits=2 --> [a, a, b, b, ...]
         assert len(T)>=totalsamp, (len(T), totalsamp)
-        T = T[:totalsamp]
+        T = T[:totalsamp] # clip to actual register size
 
+        # T now contains time of the sample read from each address
+
+        # demux into logical channels of the appropriate length
+        # eg. if chan_keep selects an odd number of channels, then
+        # some will be one sample shorter.
         return [T[i::nbits] for i in range(len(chans))]
 
     def _exchange(self, addrs, values=None):
