@@ -29,9 +29,10 @@ def caput(*args, **kws):
 class CADevice(DeviceBase):
     backend = 'ca'
 
-    def __init__(self, addr, timeout=1.0, **kws):
+    def __init__(self, addr, timeout=5.0, **kws):
         DeviceBase.__init__(self, **kws)
         self.timeout = timeout
+        assert self.timeout>0.0, self.timeout
         self.prefix = addr  # PV prefix
 
         # fetch mapping from register name to info dict

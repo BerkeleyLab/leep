@@ -145,7 +145,7 @@ def getargs():
     P = ArgumentParser()
     P.add_argument('-d', '--debug', action='store_const', const=logging.DEBUG, default=logging.INFO)
     P.add_argument('-q', '--quiet', action='store_const', const=logging.WARN, dest='debug')
-    P.add_argument('-t', '--timeout', type=float, default=1.0)
+    P.add_argument('-t', '--timeout', type=float, default=5.0)
     P.add_argument('-i', '--inst', action='append', default=[])
     P.add_argument('dest', metavar="URI", help="Server address.  ca://Prefix or leep://host[:port]")
 
