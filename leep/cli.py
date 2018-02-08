@@ -131,7 +131,7 @@ def gentemplate(args, dev):
     out = tempfile.NamedTemporaryFile('r+')
     out.write('# Generated from\n# FW: %s\n# JSON: %s\n# Code: %s\n\n' % (dev.descript, dev.jsonhash, dev.codehash))
 
-    out.write('file "feed_base.template"\n{\n{PREF="$(CHAS)CTRL_"}\n}\n\n')
+    out.write('file "feed_base.template"\n{\n{PREF="$(CHAS):CTRL_"}\n}\n\n')
 
     for fname, infos in files:
         out.write('file "%s"\n{\n' % fname)
@@ -139,7 +139,7 @@ def gentemplate(args, dev):
         infos.sort(key=lambda i: i['pv'])
 
         for info in infos:
-            out.write('{PREF="$(CHAS)%(pv)s",\tREG="%(name)s",\tSIZE="%(size)s"}\n' % info)
+            out.write('{PREF="$(CHAS):%(pv)s",\tREG="%(name)s",\tSIZE="%(size)s"}\n' % info)
 
         out.write('}\n\n')
 
