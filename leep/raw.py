@@ -207,6 +207,7 @@ class LEEPDevice(DeviceBase):
         ], instance=instance)
 
         wave_shift, Ymax = yscale(dec)
+        wave_shift, Ymax = 0, 1
         # assume wave_shift has been set properly
         assert Ymax != 0, dec
 

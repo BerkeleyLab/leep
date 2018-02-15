@@ -208,6 +208,7 @@ class DeviceBase(object):
             try:
                 if inst[0] == 'set':
                     _inst, name, value = inst
+                    value = int(value)
 
                     # eg.
                     #  name
@@ -240,6 +241,8 @@ class DeviceBase(object):
 
                 elif inst[0] == 'sleep':
                     _inst, delay = inst
+                    delay = int(delay)
+
                     assert delay >= 0, inst
                     if len(ret) < 4:
                         raise RuntimeError('sleep must follow a set')
