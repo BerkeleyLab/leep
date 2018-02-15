@@ -127,14 +127,12 @@ class c_setup_master:
     def configure_fpga(self):
 
         # Initial setup for waveform acquisition
-        # Revise this based on the leep interface (set_decimate instead of direct interaction with wsp and wave_shift)
         self.rfs.reg_write([
             ('bank_next', 0),
-            ('dsp_wave_samp_per', self.wsp),
-            # ('dsp_wave_shift', self.wave_shift),
-            ('dsp_chan_keep', 0xff0),
-
         ])
+
+        self.rfs.set_decimate(self.wsp)
+        self.rfs.set_channel_mask(range(2, 10))
 
         # Initial setup is for loopback, forward, reverse, cavity.
         # Constants above reflect expectation for that to change, to include drive instead of loopback,
@@ -503,9 +501,9 @@ class c_setup_master:
             # piezo_dc is no-op except for software cavity simulators
             # At some point this could shift to using steppers?
             query = self.base_set + [
-                ('dsp_chan_keep', 0x3fc,),
                 ('piezo_dc', psu),
             ]
+            self.rfs.set_channel_mask(range(2, 10))
             self.write_and_acquire(query)
             self.set_start()
             slope, bw, max_amp = self.usual_find_slope()
@@ -823,14 +821,14 @@ if __name__ == '__main__':
 
     parser = ArgumentParser(description="RF Controls interface commands")
 
-    parser.add_argument('-d', '--debug', action='store_const', const=logging.DEBUG, default=logging.INFO)
+    parser.add_argument('-v', '--verbose', action='store_const', const=logging.DEBUG, default=logging.INFO, dest='debug')
     parser.add_argument('-q', '--quiet', action='store_const', const=logging.WARN, dest='debug')
     parser.add_argument('-a', '--address', dest="rfs_ip", default='192.168.165.44', help='RFS IP address')
     parser.add_argument('-l', '--loopback', dest='loopback', action='store_true', default=False, help='Enable loopback mode')
     parser.add_argument('-m', '--mode', dest='mode_center', type=int, help='Center for 8pi/9 mode search (kHz)')
     parser.add_argument('-p', '--port', dest='port', default=50006, type=int, help='UDP Port')
     parser.add_argument('-P', '--PRC', dest='prc_ip', help='PRC IP address (for 8pi/9 mode scan)')
-    parser.add_argument('-w', '--wave_samp_per', dest='wsp', default=1, type=int, help='Samples per waveform buffer')
+    parser.add_argument('-d', '--decimate', dest='wsp', default=1, type=int, help='Samples per waveform buffer')
     parser.add_argument('-z', '--zone', dest='zone', default=1, type=int, help='RFS controller zone (0 or 1)')
     parser.add_argument('-j', '--json', dest='json_file', help='JSON configuration file')
     parser.add_argument('-s', '--save_all_buffers', action='store_true', dest='save_all_buffers', help='Save all data buffers')
