@@ -157,7 +157,7 @@ class LEEPDevice(DeviceBase):
 
         T, = self.reg_read(['dsp_tag'], instance=instance)
         if tag or toggle_tag:
-            T = (T+1) & 0xffff
+            T = (T+1) & 0xff
             self.reg_write([('dsp_tag', T)], instance=instance)
             _log.debug('Set Tag %d', T)
 
@@ -182,7 +182,7 @@ class LEEPDevice(DeviceBase):
             slow, = self.reg_read(['slow_data'], instance=instance)
             tag_old = slow[34]
             tag_new = slow[33]
-            dT = (tag_old - T) & 0xffff
+            dT = (tag_old - T) & 0xff
             tag_match = dT == 0 and tag_new == tag_old
 
             if not tag:
@@ -191,8 +191,8 @@ class LEEPDevice(DeviceBase):
             if tag_match:
                 break  # all done, waveform reflects latest parameter changes
 
-            if dT != 0xffff:
-                raise RuntimeError('acquisition collides with another client')
+            if dT != 0xff:
+                raise RuntimeError('acquisition collides with another client: %d %d %d' % (tag_old, tag_new, T))
 
             # retry
 
