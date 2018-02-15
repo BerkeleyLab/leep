@@ -109,7 +109,7 @@ class LEEPDevice(DeviceBase):
         raw = self.exchange(addrs)
 
         ret = []
-        for i,(info, L) in enumerate(lens):
+        for i, (info, L) in enumerate(lens):
             data, raw = raw[:L], raw[L:]
             assert len(data) == L, (len(data), L)
             if info.get('sign', 'unsigned') == 'signed':
@@ -133,7 +133,7 @@ class LEEPDevice(DeviceBase):
         return ret
 
     def set_decimate(self, dec, instance=[]):
-        assert dec>=1 and dec<=255
+        assert dec >= 1 and dec <= 255
         self.reg_write([('wave_samp_per', dec)], instance=instance)
 
     def set_channel_mask(self, chans=[], instance=[]):
@@ -144,15 +144,16 @@ class LEEPDevice(DeviceBase):
 
         self.reg_write([('chan_keep', chans)], instance=instance)
 
-    def wait_for_acq(self, tag=False, timeout=5.0, instance=[]):
+    def wait_for_acq(self, tag=False, toggle_tag=False, timeout=5.0, instance=[]):
         """Wait for next waveform acquisition to complete.
         If tag=True, then wait for the next acquisition which includes the
         side-effects of all preceding register writes
         """
         start = time.time()
 
-        if tag:
-            T = (self.reg_read(['dsp_tag'], instance=instance)[0]+1) & 0xffff
+        T, = self.reg_read(['dsp_tag'], instance=instance)
+        if tag or toggle_tag:
+            T = (T+1) & 0xffff
             self.reg_write([('dsp_tag', T)], instance=instance)
             _log.debug('Set Tag %d', T)
 
@@ -174,16 +175,24 @@ class LEEPDevice(DeviceBase):
                 if ready & mask:
                     break
 
+            slow, = self.reg_read(['slow_data'], instance=instance)
+            tag_old = slow[34]
+            tag_new = slow[33]
+            dT = (tag_old - T) & 0xffff
+            tag_match = dT == 0 and tag_new == tag_old
+
             if not tag:
                 break
 
-            slow, = self.reg_read(['slow_data'], instance=instance)
-            dT = (slow[33] - T) & 0xffff
-            if dT >= 0:
-                if dT > 0:
-                    _log.warn('acquisition collides with another client')
-                break  # all done
+            if tag_match:
+                break  # all done, waveform reflects latest parameter changes
+
+            if dT != 0xffff:
+                raise RuntimeError('acquisition collides with another client')
+
             # retry
+
+        return tag_match, slow, now
 
     def get_channels(self, chans=[], instance=[]):
         """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
@@ -245,9 +254,9 @@ class LEEPDevice(DeviceBase):
 
         T = numpy.arange(1+totalsamp/nbits) * period  # result is often one sample too long
 
-        T = T.repeat(nbits) # [a, b, ...] w/ nbits=2 --> [a, a, b, b, ...]
-        assert len(T)>=totalsamp, (len(T), totalsamp)
-        T = T[:totalsamp] # clip to actual register size
+        T = T.repeat(nbits)  # [a, b, ...] w/ nbits=2 --> [a, a, b, b, ...]
+        assert len(T) >= totalsamp, (len(T), totalsamp)
+        T = T[:totalsamp]  # clip to actual register size
 
         # T now contains time of the sample read from each address
 

@@ -262,20 +262,19 @@ class DeviceBase(object):
         # program must end with a "stop" command (set address zero)
         info = self.get_reg_info('XXX', instance=instance)
         maxcnt = 2**info['addr_width']
-        assert maxcnt>=4, info
+        assert maxcnt >= 4, info
         if len(ret) > maxcnt-4:
             raise RuntimeError('tget Sequence %d exceeds max %d' % (len(ret), maxcnt-4))
         ret.extend([0]*(maxcnt-len(ret)))
         assert len(ret) == maxcnt, (len(ret), maxcnt)
         return ret
 
-    def load_tgen(self, prog, instance=[]):
-        """Assemble and load TGEN program
+    def tgen_reg_sequence(self, prog, instance=[]):
+        """Assemble TGEN program and bank switching
+        register writes
         """
         val = self.assemble_tgen(prog, instance=instance)
         next, = self.reg_read(['bank_next'])
 
-        self.reg_write([
-            ('XXX', val),
-            ('bank_next', next ^ 1),
-        ], instance=instance)
+        return [('XXX', val),
+                ('bank_next', next ^ 1), ]
