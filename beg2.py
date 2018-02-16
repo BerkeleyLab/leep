@@ -62,6 +62,7 @@ class c_setup_master:
 
         # Open communication with the RFS
         self.rfs = leep.open('leep://' + self.rfs_ip, instance=[self.zone])
+        #self.rfs = leep.open('ca://TST:', instance=[self.zone])
 
         # Open communication with PRC if
         # needed for 8pi/9 mode calibration
@@ -871,6 +872,8 @@ if __name__ == '__main__':
         master.open_control0()
         master.close_phase_loop0(set_P=2**17)
         master.goto_cw0()
+    except SystemExit:
+        raise
     except:
         _log.exception('oops')
         master.log("\nException!", stdout=True)

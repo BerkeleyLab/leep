@@ -4,6 +4,7 @@ _log = logging.getLogger(__name__)
 
 import json
 import zlib
+import time
 
 import numpy
 
@@ -32,7 +33,7 @@ class CADevice(DeviceBase):
     def __init__(self, addr, timeout=5.0, **kws):
         DeviceBase.__init__(self, **kws)
         self.timeout = timeout
-        assert self.timeout>0.0, self.timeout
+        assert self.timeout > 0.0, self.timeout
         self.prefix = addr  # PV prefix
 
         # fetch mapping from register name to info dict
@@ -67,7 +68,7 @@ class CADevice(DeviceBase):
             I = suffix.find('%', I)
             if I == -1:
                 break
-            I += 1 # skip past found charactor
+            I += 1  # skip past found charactor
             N += 1
 
         name = str(self.prefix + (suffix % tuple(self.instance[:N])))
@@ -112,8 +113,9 @@ class CADevice(DeviceBase):
         return '<not implemented>'
 
     def set_decimate(self, dec):
-        assert dec>=1 and dec<=255
-        self.pv_write('CAV%s:ACQ_DECIM', dec)
+        assert dec >= 1 and dec <= 255
+        I = self.instance
+        caput('CAV%s:ACQ_DECIM' % I[0], dec)
 
     def set_channel_mask(self, chans=None, instance=[]):
         """Enabled specified channels.
@@ -139,16 +141,12 @@ class CADevice(DeviceBase):
         I = self.instance + instance
         # assume that the shell_#_ number is the first
 
-        if tag:
-            # subscribe to last tag to get updates only when a new tag comes into effect
-            pv = 'CAV%s:ACQ_TAG_RBV' % (I[0],)
+        pv = 'CAV%s:DIAG_CNT' % (I[0],)
+        if tag or toggle_tag:
             # increment tag
             caput('CAV%s:ACQ_TAGINC_CMD' % (I[0],), 1, wait=True)
-            old = caget('CAV%s:ACQ_TAG_RBV' % (I[0],))
 
-        else:
-            # subscribe to acquisition counter to get all updates
-            pv = 'CAV%s:DIAG_CNT' % (I[0],)
+        T = caget('CAV%s:ACQ_TAG_RBV' % (I[0],))
 
         if self._S_pv != pv:
             if self._S is not None:
@@ -156,6 +154,7 @@ class CADevice(DeviceBase):
             self._E.Reset()
 
             self._S = camonitor(pv, self._E.Signal, format=FORMAT_TIME)
+            _log.debug('Monitoring %s', pv)
             # wait for, and consume, initial update
             self._E.Wait(timeout=timeout)
 
@@ -166,12 +165,25 @@ class CADevice(DeviceBase):
 
         while True:
             V = self._E.Wait(timeout=timeout)
+            now = time.time()
+
+            tag_old = caget('CAV%s:ACQ_TAG1_RBV' % (I[0],))
+            tag_new = caget('CAV%s:ACQ_TAG2_RBV' % (I[0],))
+            dT = (tag_old - T) & 0xff
+            tag_match = dT == 0 and tag_new == tag_old
 
             if not tag:
                 break
-            dT = (V - old) % 0xffff
-            if dT >= 0:
-                break
+
+            if tag_match:
+                break  # all done, waveform reflects latest parameter changes
+
+            if dT != 0xff:
+                raise RuntimeError('acquisition collides with another client: %d %d %d' % (tag_old, tag_new, T))
+
+            # retry
+
+        return tag_match, self.reg_read(['slow_data'])[0], now
 
     def get_channels(self, chans=[], instance=[]):
         """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
@@ -181,6 +193,9 @@ class CADevice(DeviceBase):
         ret = caget(['CAV%s:CH%d:WF' % (I[0], ch) for ch in chans], format=FORMAT_TIME)
         if len(ret) >= 2 and not all([ret[0].raw_stamp == R.raw_stamp for R in ret[1:]]):
             raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in ret])
+        # ret = [ch*130810.93 for ch in ret]  # TODO: fix scaling
+        for ch in ret:
+            print(ch.min(), ch.max())
         return ret
 
     def get_timebase(self, chans=[], instance=[]):
