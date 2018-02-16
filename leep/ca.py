@@ -41,12 +41,12 @@ class CADevice(DeviceBase):
         #  'input' PV to read register
         #  'output' PV to write register
         #  'increment' PV to +1 register
-        info = json.loads(zlib.decompress(caget(addr+'ctrl:JInfo-I')))
+        info = json.loads(zlib.decompress(caget(addr+'CTRL_JINFO')))
         self._info = info['records']
 
         # raw JSON blob from device
         # {'reg_name:{'base_addr':0, ...}}
-        self.regmap = json.loads(zlib.decompress(caget(addr+'ctrl:JSON-I')))
+        self.regmap = json.loads(zlib.decompress(caget(addr+'CTRL_JSON')))
 
         self._S = None
         self._S_pv = None
@@ -101,11 +101,11 @@ class CADevice(DeviceBase):
 
     @property
     def descript(self):
-        return caget(str(self.prefix+'ctrl:Desc-I'), datatype=DBR_CHAR_STR)
+        return caget(str(self.prefix+'CTRL_FW_DESC'), datatype=DBR_CHAR_STR)
 
     @property
     def codehash(self):
-        return caget(str(self.prefix+'ctrl:CodeHash-I'), datatype=DBR_CHAR_STR)
+        return caget(str(self.prefix+'CTRL_FW_CODEHASH'), datatype=DBR_CHAR_STR)
 
     @property
     def jsonhash(self):
@@ -113,7 +113,7 @@ class CADevice(DeviceBase):
 
     def set_decimate(self, dec):
         assert dec>=1 and dec<=255
-        self.pv_write('acq:dev%s:Dec-SP', dec)
+        self.pv_write('CAV%s:ACQ_DECIM', dec)
 
     def set_channel_mask(self, chans=None, instance=[]):
         """Enabled specified channels.
@@ -127,11 +127,11 @@ class CADevice(DeviceBase):
         # enable/disable for even/odd channels are actually aliases
         # so disable first, then enable
         if disable:
-            caput(['%sacq:dev%s:ch%d:Ena-Sel' % (self.prefix, I[0], ch) for ch in disable], 'Disable', wait=True)
+            caput(['CAV%s:CH%d:ENABLE' % (I[0], ch) for ch in disable], 'Disable', wait=True)
         if chans:
-            caput(['%sacq:dev%s:ch%d:Ena-Sel' % (self.prefix, I[0], ch) for ch in chans], 'Enable', wait=True)
+            caput(['CAV%s:CH%d:ENABLE' % (I[0], ch) for ch in chans], 'Enable', wait=True)
 
-    def wait_for_acq(self, tag=False, timeout=5.0, instance=[]):
+    def wait_for_acq(self, toggle_tag=False, tag=False, timeout=5.0, instance=[]):
         """Wait for next waveform acquisition to complete.
         If tag=True, then wait for the next acquisition which includes the
         side-effects of all preceding register writes
@@ -141,14 +141,14 @@ class CADevice(DeviceBase):
 
         if tag:
             # subscribe to last tag to get updates only when a new tag comes into effect
-            pv = '%sacq:dev%s:Tag2-I' % (self.prefix, I[0])
+            pv = 'CAV%s:ACQ_TAG_RBV' % (I[0],)
             # increment tag
-            caput('%sacq:dev%s:TagInc-Cmd' % (self.prefix, I[0]), 1, wait=True)
-            old = caget('%sacq:dev%s:Tag-RB' % (self.prefix, I[0]))
+            caput('CAV%s:ACQ_TAGINC_CMD' % (I[0],), 1, wait=True)
+            old = caget('CAV%s:ACQ_TAG_RBV' % (I[0],))
 
         else:
             # subscribe to acquisition counter to get all updates
-            pv = '%sacq:dev%s:AcqCnt-I' % (self.prefix, I[0])
+            pv = 'CAV%s:DIAG_CNT' % (I[0],)
 
         if self._S_pv != pv:
             if self._S is not None:
@@ -178,14 +178,14 @@ class CADevice(DeviceBase):
         chans may be a bit mask or a list of channel numbers
         """
         I = self.instance + instance
-        ret = caget(['%sacq:dev%s:ch%d:I-I' % (self.prefix, I[0], ch) for ch in chans], format=FORMAT_TIME)
+        ret = caget(['CAV%s:CH%d:WF' % (I[0], ch) for ch in chans], format=FORMAT_TIME)
         if len(ret) >= 2 and not all([ret[0].raw_stamp == R.raw_stamp for R in ret[1:]]):
             raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in ret])
         return ret
 
     def get_timebase(self, chans=[], instance=[]):
         I = self.instance + instance
-        ret = caget(['%sacq:dev%s:ch%d:T-I' % (self.prefix, I[0], ch) for ch in chans], format=FORMAT_TIME)
+        ret = caget(['CAV%s:CH%d:TWF' % (I[0], ch) for ch in chans], format=FORMAT_TIME)
         if len(ret) >= 2 and not all([ret[0].raw_stamp == R.raw_stamp for R in ret[1:]]):
             raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in ret])
         return ret
