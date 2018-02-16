@@ -194,7 +194,7 @@ class LEEPDevice(DeviceBase):
             if dT != 0xff:
                 raise RuntimeError('acquisition collides with another client: %d %d %d' % (tag_old, tag_new, T))
 
-            # retry
+            _log.debug('Acquire retry')
 
         return tag_match, slow, now
 

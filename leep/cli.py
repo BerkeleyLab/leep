@@ -40,8 +40,8 @@ def acquire(args, dev):
         from matplotlib import pylab
         pylab.figure()
     dev.set_channel_mask(args.channels)
-    #if dev.backend == 'ca':
-    #    dev.pv_write('acq:dev%s:Mode-Sel', 'Normal')
+    if dev.backend == 'ca':
+        dev.pv_write('circle_data', 'acqmode', 'Normal')
     dev.wait_for_acq(tag=args.tag, toggle_tag=args.toggle)
     for T, ch in zip(dev.get_timebase(args.channels),
                      dev.get_channels(args.channels)):
