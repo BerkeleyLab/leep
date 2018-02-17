@@ -62,8 +62,8 @@ class c_setup_master:
             print("Failed opening log file: %s", self.data_dir + "/beg.log")
 
         # Open communication with the RFS
-        self.rfs = leep.open('leep://' + self.rfs_ip, instance=[self.zone])
-        # self.rfs = leep.open('ca://TST:', instance=[self.zone])
+        _log.info('RFS address %s [%s]', self.rfs_addr, self.zone)
+        self.rfs = leep.open(self.rfs_addr, instance=[self.zone])
 
         # Open communication with PRC if
         # needed for 8pi/9 mode calibration
@@ -116,7 +116,7 @@ class c_setup_master:
         self.log("Run configuration:", stdout=True)
         if self.desc is not None:
             self.log("  Description %s" % self.desc, stdout=True)
-        self.log("  RFS IP %s" % self.rfs_ip, stdout=True)
+        self.log("  RFS Address %s" % self.rfs_addr, stdout=True)
         if self.prc_ip is not None:
             self.log("  PRC IP %s" % self.prc_ip, stdout=True)
         self.log("  Config wsp %d" % self.wsp, stdout=True)
@@ -801,7 +801,7 @@ if __name__ == '__main__':
     # default values
     conf = dict(
         desc=None,
-        rfs_ip='192.168.165.44',
+        rfs_addr='leep://192.168.165.44',
         port=50006,
         wsp=1,
         loopback=False,
@@ -826,7 +826,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-v', '--verbose', action='store_const', const=logging.DEBUG, default=logging.INFO, dest='debug')
     parser.add_argument('-q', '--quiet', action='store_const', const=logging.WARN, dest='debug')
-    parser.add_argument('-a', '--address', dest="rfs_ip", default=None, help='RFS IP address')
+    parser.add_argument('-a', '--address', dest="rfs_addr", default=None, help='RFS URL (leep://<IP> or ca://<PREFIX>)')
     parser.add_argument('-l', '--loopback', dest='loopback', action='store_true',
                         default=None, help='Enable loopback mode')
     parser.add_argument('-m', '--mode', dest='mode_center', type=int,
@@ -852,6 +852,8 @@ if __name__ == '__main__':
     # Update configuration dictionary with values passed from the command line
     # Command-line arguments take priority over JSON file settings
     conf.update(args)
+
+    logging.basicConfig(level=conf['debug'])
 
     data_dir = start_time.strftime('beg_%Y%m%d_%H%M%S')
     os.mkdir(data_dir)

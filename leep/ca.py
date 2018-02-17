@@ -19,8 +19,13 @@ else:
     from cothread import Event
 
 def caget(*args, **kws):
-    R = _caget(*args, **kws)
-    _log.debug('caget(%s, %s) -> %s' % (args, kws, R))
+    try:
+        R = _caget(*args, **kws)
+    except:
+        _log.exception('Error caget(%s, %s)' % (args, kws))
+        raise
+    else:
+        _log.debug('caget(%s, %s) -> %s' % (args, kws, R))
     return R
 
 def caput(*args, **kws):
@@ -34,7 +39,7 @@ class CADevice(DeviceBase):
         DeviceBase.__init__(self, **kws)
         self.timeout = timeout
         assert self.timeout > 0.0, self.timeout
-        self.prefix = addr  # PV prefix
+        self.prefix = str(addr)  # PV prefix
 
         # fetch mapping from register name to info dict
         # {'records':{'reg_name':{'<info>':'<value>'}}}
@@ -42,12 +47,12 @@ class CADevice(DeviceBase):
         #  'input' PV to read register
         #  'output' PV to write register
         #  'increment' PV to +1 register
-        info = json.loads(zlib.decompress(caget(addr+'CTRL_JINFO')))
+        info = json.loads(zlib.decompress(caget(self.prefix+'CTRL_JINFO')))
         self._info = info['records']
 
         # raw JSON blob from device
         # {'reg_name:{'base_addr':0, ...}}
-        self.regmap = json.loads(zlib.decompress(caget(addr+'CTRL_JSON')))
+        self.regmap = json.loads(zlib.decompress(caget(self.prefix+'CTRL_JSON')))
 
         self._S = None # placeholder for subscription
         # Event acts as a cache for the last received value.
