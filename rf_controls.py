@@ -16,6 +16,7 @@ _log = logging.getLogger(__name__)
 # will usually get a timestamp that matches
 start_time = datetime.datetime.now()
 
+
 def angle_shift(angle, shift):
     a = angle+shift
     if (a > 262144):
@@ -62,7 +63,7 @@ class c_setup_master:
 
         # Open communication with the RFS
         self.rfs = leep.open('leep://' + self.rfs_ip, instance=[self.zone])
-        #self.rfs = leep.open('ca://TST:', instance=[self.zone])
+        # self.rfs = leep.open('ca://TST:', instance=[self.zone])
 
         # Open communication with PRC if
         # needed for 8pi/9 mode calibration
@@ -298,14 +299,6 @@ class c_setup_master:
         phase = numpy.unwrap(numpy.angle(cav))[ix]
         ixx = numpy.array(ix)-1  # extrapolate back to second time step
         pp = numpy.polyfit(ixx, phase, 1)
-        # from matplotlib import pylab
-        # pylab.subplot(3, 1, 1)
-        # pylab.plot(numpy.abs(cav))
-        # pylab.subplot(3, 1, 2)
-        # pylab.plot(numpy.angle(cav))
-        # pylab.subplot(3, 1, 3)
-        # pylab.plot(ixx, phase)
-        # pylab.show()
         pp_fit = numpy.polyval(pp, ixx)
         pp_err = numpy.sqrt(numpy.mean((phase-pp_fit)**2))
         self.log("Linear phase fit coefficients (%.3f %.3f), rms error %.1f degrees" %
@@ -544,10 +537,14 @@ class c_setup_master:
             self.find_model()
             self.log(self.status_line()+op_str, stdout=True)
         best_ix = oscan.index(max(oscan))
-        self.log("Best index %d for maximum output %.1f" % (best_ix, max(oscan)), stdout=True)
+        self.log("Best index %d for maximum output %.1f" % (best_ix, max(oscan)))
         self.reg_ph_offset = (self.reg_ph_offset + best_ix*8192) % 262144
         self.reg_ph_offset = self.analyze_poffset_scan(pscan, oscan, 0.0, check_range=False)
-        self.log("Switching to SEL with ph_offset %d" % self.reg_ph_offset)
+        if self.reg_ph_offset is None:
+            self.log("Coarse phase offset scan analysis failed, aborting", stdout=True)
+            self.shutdown_drive(terminate=True, code=2)
+        ph_offset_deg = self.reg_ph_offset * 360 / 262144.0
+        self.log(u"Switching to SEL with ph_offset %.1f\u00B0" % ph_offset_deg, stdout=True)
         self.write_and_acquire(self.sel_set + [('ph_offset', self.reg_ph_offset)])
 
     ########
@@ -624,6 +621,7 @@ class c_setup_master:
             self.write_and_acquire(query)
             # [['amp_max',in_level]])
             self.out_level = self.find_level(verbose=False)
+            self.usual_find_slope(verbose=False)
             self.check_fwd(verbose=False)
             self.find_model()
             self.log(self.status_line()+op_str, stdout=True)
@@ -787,6 +785,7 @@ class c_setup_master:
             self.logfile.write(line+'\n')
         if stdout:
             print(line)
+            sys.stdout.flush()
 
 
 def usage():
@@ -795,7 +794,10 @@ def usage():
 
 
 if __name__ == '__main__':
-    import getopt
+    # maybe wrong in theory, but successfully lets this program
+    # print its its fancy unicode symbols to pipes and redirects
+    sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+
     # default values
     conf = dict(
         desc=None,
@@ -824,19 +826,32 @@ if __name__ == '__main__':
 
     parser.add_argument('-v', '--verbose', action='store_const', const=logging.DEBUG, default=logging.INFO, dest='debug')
     parser.add_argument('-q', '--quiet', action='store_const', const=logging.WARN, dest='debug')
-    parser.add_argument('-a', '--address', dest="rfs_ip", default='192.168.165.44', help='RFS IP address')
-    parser.add_argument('-l', '--loopback', dest='loopback', action='store_true', default=False, help='Enable loopback mode')
-    parser.add_argument('-m', '--mode', dest='mode_center', type=int, help='Center for 8pi/9 mode search (kHz)')
-    parser.add_argument('-p', '--port', dest='port', default=50006, type=int, help='UDP Port')
-    parser.add_argument('-P', '--PRC', dest='prc_ip', help='PRC IP address (for 8pi/9 mode scan)')
-    parser.add_argument('-d', '--decimate', dest='wsp', default=1, type=int, help='Samples per waveform buffer')
-    parser.add_argument('-z', '--zone', dest='zone', default=1, type=int, help='RFS controller zone (0 or 1)')
+    parser.add_argument('-a', '--address', dest="rfs_ip", default=None, help='RFS IP address')
+    parser.add_argument('-l', '--loopback', dest='loopback', action='store_true',
+                        default=None, help='Enable loopback mode')
+    parser.add_argument('-m', '--mode', dest='mode_center', type=int,
+                        default=None, help='Center for 8pi/9 mode search (kHz)')
+    parser.add_argument('-p', '--port', dest='port', default=None, type=int, help='UDP Port')
+    parser.add_argument('-P', '--PRC', dest='prc_ip', default=None, help='PRC IP address (for 8pi/9 mode scan)')
+    parser.add_argument('-d', '--decimate', dest='wsp', default=None, type=int, help='Samples per waveform buffer')
+    parser.add_argument('-z', '--zone', dest='zone', default=None, type=int, help='RFS controller zone (0 or 1)')
     parser.add_argument('-j', '--json', dest='json_file', help='JSON configuration file')
-    parser.add_argument('-s', '--save_all_buffers', action='store_true', dest='save_all_buffers', help='Save all data buffers')
+    parser.add_argument('-s', '--save_all_buffers', action='store_true',
+                        dest='save_all_buffers', default=False, help='Save all data buffers')
+
+    # Get dictionary with command-line arguments
+    args = vars(parser.parse_args())
+    # Remove defaulted arguments, defaults are set on conf dictionary
+    args = {key: value for key, value in args.items() if value is not None}
+
+    # Overwrite defaults with configuration in JSON file
+    if 'json_file' in args:
+        json_dict = json.load(open(args['json_file'], 'r'))
+        conf.update((k, json_dict[k]) for k in conf.viewkeys() & json_dict.viewkeys())
 
     # Update configuration dictionary with values passed from the command line
-    conf.update(vars(parser.parse_args()))
-    logging.basicConfig(level=conf['debug'])
+    # Command-line arguments take priority over JSON file settings
+    conf.update(args)
 
     data_dir = start_time.strftime('beg_%Y%m%d_%H%M%S')
     os.mkdir(data_dir)
@@ -845,13 +860,13 @@ if __name__ == '__main__':
     if conf['mode_center'] is None:
         conf['prc_ip'] = None
 
-    master = c_setup_master(conf, save_all_buffers=save_all_buffers)
+    master = c_setup_master(conf, save_all_buffers=conf['save_all_buffers'])
     master.configure_fpga()
 
     for key in ['zone', 'loopback', 'mode_center']:
         master.log("  Config %s %s" % (key, repr(conf[key])), stdout=True)
 
-    # Loopback looks at results of first write_and_acquire() call from c_setup_master()
+    # Loopback looks at results of first write_and_acquire() call from master.configure_fpga()
     lr = master.analyze_loopback(check=(conf['wsp'] == 255))  # no waiting
     if conf['loopback']:
         master.shutdown_drive(terminate=True, code=(0 if lr else 1))
@@ -875,7 +890,7 @@ if __name__ == '__main__':
     except SystemExit:
         raise
     except:
-        _log.exception('oops')
+        _log.exception('Something went wrong with one of the cavity bring-up functions')
         master.log("\nException!", stdout=True)
         master.shutdown_drive(terminate=True, code=1)
         raise
