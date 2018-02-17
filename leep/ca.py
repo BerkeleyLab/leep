@@ -187,9 +187,7 @@ class CADevice(DeviceBase):
         ret = caget(['CAV%s:CH%d:WF' % (I[0], ch) for ch in chans], format=FORMAT_TIME)
         if len(ret) >= 2 and not all([ret[0].raw_stamp == R.raw_stamp for R in ret[1:]]):
             raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in ret])
-        # ret = [ch*130810.93 for ch in ret]  # TODO: fix scaling
-        for ch in ret:
-            print(ch.min(), ch.max())
+        ret = [ch*130810.93 for ch in ret]  # TODO: fix scaling
         # TODO: reverse I/Q scaling to always give [0, 1) range
         return ret
 
