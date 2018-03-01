@@ -23,8 +23,9 @@ def reg_read_value(mg, alist):
         # print "rrv2",len(result)
     return result
 
-def interpret_slow_data(slow_data):
-    # circle_count, circle_stat, adc1_min, adc1_max, adc2_min, adc2_max, adc3_min, adc3_max, tag_now, tag_old, timestamp
+def interpret_slow_data(slow_data, abi_ver=0):
+        # circle_count, circle_stat, adc1_min, adc1_max, adc2_min, adc2_max, adc3_min, adc3_max, tag_now, tag_old, timestamp
+        # if abi_ver >= 1, dsp_status is inserted after tag_old
     circle_count = slow_data[0]*256+slow_data[1]
     circle_stat = slow_data[2]*256+slow_data[3]
     tag_now = slow_data[16]
@@ -34,10 +35,16 @@ def interpret_slow_data(slow_data):
     mm = [m-65536 if m > 32767 else m for m in mm]
     # (almost) 64-bit timestamp
     time_stamp = 0
+    ts_base = 25 if abi_ver < 1 else 27
     for ix in range(8):
-        time_stamp = time_stamp*256 + slow_data[25-ix]
+        time_stamp = time_stamp*256 + slow_data[ts_base-ix]
     time_stamp = time_stamp/32
-    return circle_count, circle_stat, mm, tag_now, tag_old, time_stamp
+    if abi_ver >= 1:
+        dsp_status = slow_data[18]*256+slow_data[19]
+        # print("dsp_status %x" % dsp_status)
+    else:
+        dsp_status = 0  # not sure this is the best choice
+    return circle_count, circle_stat, mm, tag_now, tag_old, time_stamp, dsp_status
 
 def iq_buf_collect(prc, chcount, npt, cav_mask=1, verbose=False):
     mg = prc.mg

@@ -78,6 +78,11 @@ class c_setup_master:
         self.CAV = 2
         self.DRV = 3
         self.save_all_buffers = save_all_buffers
+        self.slow_abi_ver = 0
+        try:
+            self.slow_abi_ver = self.regmap["__metadata__"]["slow_abi_ver"]
+        except:
+            pass
 
         self.dt = 1  # fake for now
         self.tick_multiply = 1  # fake for now
@@ -108,7 +113,7 @@ class c_setup_master:
 
         self.imag_clip = int(round(79500 * self.dmax_magn * self.dmax_imag))
         self.real_clip = int(round(79500 * self.dmax_magn * numpy.sqrt(1.0 - self.dmax_imag**2)))
-        self.out_level_goal = int(round(self.adc_fs * self.cav_goal / self.cav_fs))
+        self.out_level_goal = self.cav_goal / self.cav_fs  # as fraction of cavity ADC full-scale
         self.fwd_scale = numpy.sqrt(self.fwd_fs*1000)  # convert dimensionless fraction of full-scale to sqrt(W)
         self.rev_scale = numpy.sqrt(self.rev_fs*1000)  # convert dimensionless fraction of full-scale to sqrt(W)
         self.cav_scale = self.cav_fs  # convert dimensionless fraction of full-scale to MV/m
@@ -120,7 +125,7 @@ class c_setup_master:
         if self.prc_ip is not None:
             self.log("  PRC IP %s" % self.prc_ip, stdout=True)
         self.log("  Config wsp %d" % self.wsp, stdout=True)
-        self.log("  Config out_level_goal %d" % self.out_level_goal, stdout=True)
+        self.log("  Config out_level_goal %.5f" % self.out_level_goal, stdout=True)
         self.log("  Config real_clip %d" % self.real_clip, stdout=True)
         self.log("  Config imag_clip %d" % self.imag_clip, stdout=True)
         self.log("  Config channels %d %d" % (self.CAV, self.FWD), stdout=True)
@@ -216,11 +221,16 @@ class c_setup_master:
         return self.triple_pulse(pulse_len, 0, 0, level, 0)
 
     def save_data_file(self, res, datetimestr, aux):
-        isd = interpret_slow_data(aux)
+        isd = interpret_slow_data(aux, abi_ver=self.slow_abi_ver)
         header = datetimestr + " %d %d" % (isd[0], isd[5])  # circle_count and time_stamp
         fname = "%s/auto_%3.3d.dat" % (self.data_dir, self.qnum)
         numpy.savetxt(fname, numpy.asarray(res).T, fmt="%d", header=header)
         self.log("Wrote file %s" % fname)
+        self.dsp_status = isd[6]
+
+    def dsp_status_check_clipped(self, clip):
+        clip_ok = (self.dsp_status >> 8) == (0xf if clip else 0)
+        self.log("dsp_status 0x%3.3x  %s" % (self.dsp_status, "OK" if clip_ok else "??"), stdout=True)
 
     def write_and_acquire(self, query):
 
@@ -259,10 +269,10 @@ class c_setup_master:
         revm = abs(self.data_array[self.REV])  # reverse wave magnitude
         mx = max(fwdm)
         ex = max(numpy.nonzero(fwdm > 0.5*mx)[0])
-        fwd_watts = (mx/self.adc_fs*self.fwd_scale)**2
+        fwd_watts = (mx*self.fwd_scale)**2
         self.fwd_watts = fwd_watts
-        self.rev_watts = (max(revm)/self.adc_fs*self.rev_scale)**2
-        self.log("check_fwd: magnitude %.1f (%.3f kW), end of pulse at %d" % (mx, 1e-3*fwd_watts, ex), stdout=verbose)
+        self.rev_watts = (max(revm)*self.rev_scale)**2
+        self.log("check_fwd: magnitude %.5f (%.3f kW), end of pulse at %d" % (mx, 1e-3*fwd_watts, ex), stdout=verbose)
         return ex
 
     # arange for amplitude printout
@@ -283,7 +293,7 @@ class c_setup_master:
         pp = numpy.polyfit(ix, y, 1)
         bw = -pp[0]/self.dt/2.0/numpy.pi  # Hz
         max_amp = max(amp[arange])
-        self.log("Measured bandwidth %.6f kHz, detune %.6f kHz, max amp %.1f" % (bw/1000, delta_f/1000, max_amp), stdout=verbose)
+        self.log("Measured bandwidth %.6f kHz, detune %.6f kHz, max amp %.5f" % (bw/1000, delta_f/1000, max_amp), stdout=verbose)
         self.delta_f = delta_f
         self.bandwidth = bw
         return (delta_f, bw, max_amp)
@@ -382,8 +392,8 @@ class c_setup_master:
         amp = numpy.abs(cav)
         s = self.start
         amp_avg = numpy.mean(amp[range(s-20, s-5)])
-        out_mvpm = amp_avg / self.adc_fs * self.cav_scale
-        self.log("Measured amplitude %.1f (%.3f MV/m)" % (amp_avg, out_mvpm), stdout=verbose)
+        out_mvpm = amp_avg * self.cav_scale
+        self.log("Measured amplitude %.5f (%.3f MV/m)" % (amp_avg, out_mvpm), stdout=verbose)
         return amp_avg
 
     def analyze_loopback(self, check=False):
@@ -396,8 +406,8 @@ class c_setup_master:
         y_high_start = min(y_high)
         y_high_end = max(y_high)
         self.log("Loopback analysis:", stdout=True)
-        self.log("  Loopback mean on/off = %.1f/%.1f" % (y_on_mean, y_off_mean), stdout=True)
-        self.log("  Loopback std. on/off = %.1f/%.1f" % (y_on_std, y_off_std), stdout=True)
+        self.log("  Loopback mean on/off = %.5f/%.5f" % (y_on_mean, y_off_mean), stdout=True)
+        self.log("  Loopback std. on/off = %.5f/%.5f" % (y_on_std, y_off_std), stdout=True)
         self.log("  Loopback pulse start, end = %d, %d" % (y_high_start, y_high_end), stdout=True)
         if not check:
             return True  # no checks
@@ -433,7 +443,7 @@ class c_setup_master:
         if include_pedestal:
             ant_peak += fitc[2]
             print_suffix = " (using pedestal)"
-        self.log("offset_fit_trig: %.1f%+.1f  rms error %.1f%s" % (z.real, z.imag, rms, print_suffix), stdout=True)
+        self.log("offset_fit_trig: %.5f%+.5fi  rms error %.5f%s" % (z.real, z.imag, rms, print_suffix), stdout=True)
         return center, ant_peak
 
     # Returns best estimate of ph_offset
@@ -458,7 +468,7 @@ class c_setup_master:
                 self.log("Minimum outside scan range, aborting!", stdout=True)
                 return None
         # print center
-        self.log("Shifting ph_offset by %.2f degrees, anticipated value %.1f" % (center*360/2**18, ant_peak), stdout=True)
+        self.log("Shifting ph_offset by %.2f degrees, anticipated value %.5f" % (center*360/2**18, ant_peak), stdout=True)
         trial_offset = angle_shift(start_offset, center)
         self.log("Finally setting ph_offset to: %d" % trial_offset, stdout=True)
         return trial_offset
@@ -479,7 +489,7 @@ class c_setup_master:
         drv = self.in_level / 795.0
         fwd = numpy.sqrt(self.fwd_watts)
         rev = numpy.sqrt(self.rev_watts)
-        cav = self.out_level / self.adc_fs * self.cav_scale
+        cav = self.out_level * self.cav_scale
         p = duty, drv, fwd, rev, cav, self.bandwidth, self.delta_f
         return u"DF: %.0f%%  drv: %4.1f%%  fwd: %5.2f\u221aW  rev: %5.2f\u221aW  cav: %5.2f MV/m  decay BW: %5.2f Hz  det: %6.2f Hz" % p
 
@@ -552,8 +562,8 @@ class c_setup_master:
         self.log("\nRamping up field", stdout=True)
         self.out_level = 0
         while self.out_level < self.out_level_goal*0.84:
-            out_mvpm = self.out_level / self.adc_fs * self.cav_scale
-            self.log("Measured response %.1f (%.3f MV/m), will set new level %d" %
+            out_mvpm = self.out_level * self.cav_scale
+            self.log("Measured response %.5f (%.3f MV/m), will set new level %d" %
                      (self.out_level, out_mvpm, self.in_level))
             op_str = "  from: drive ramp"
             query = self.sel_set + self.simple_pulse(self.in_level, 240)
@@ -613,7 +623,7 @@ class c_setup_master:
         self.log("\nFine-adjusting field", stdout=True)
         self.out_level = 0
         while abs(self.out_level/self.out_level_goal-1) > 0.01:
-            out_mvpm = self.out_level / self.adc_fs * self.cav_scale
+            out_mvpm = self.out_level * self.cav_scale
             self.log("Measured response %.1f (%.3f MV/m), will set new level %d" %
                      (self.out_level, out_mvpm, self.in_level))
             op_str = "  from: drive adjust, prev %5.1f%%" % (100*self.out_level/self.out_level_goal)
@@ -684,8 +694,8 @@ class c_setup_master:
         # lo = 74694/2^17 * CORDIC gain = 0.938439
         # fwashout gain = abs(1+a/(1-a-z)) = 1.031391
         # fdownconvert gain = lo * sin(theta) = 0.911986
-        fdbk_scale = 3.09793  # fwashout gain * fdownconvert gain * CORDIC gain * 2
-        set_R = int(self.out_level_goal * fdbk_scale / 16)
+        fdbk_scale = 0.774483  # fwashout gain * fdownconvert gain * CORDIC gain / 2
+        set_R = int(self.out_level_goal * 2**17 * fdbk_scale)
         self.log("setmp_0 = %d" % set_R, stdout=True)
         len_set = [('setmp_0', set_R)] + self.triple_pulse(120, 540, 0, self.in_level, 0)
         self.write_and_acquire(len_set)
@@ -702,23 +712,27 @@ class c_setup_master:
         self.log("\nGo To closed-loop CW", stdout=True)
         len_set = self.triple_pulse(120, 60, 480, self.in_level, self.imag_clip, cw=True)
         self.write_and_acquire(len_set)
+        self.dsp_status_check_clipped(True)
         len_set = self.triple_pulse(0, 0, 0, self.in_level, self.imag_clip, cw=True)
         self.write_and_acquire(len_set)
+        self.dsp_status_check_clipped(False)
         self.log("Idling tgen", stdout=True)
         len_set = self.rfs.tgen_reg_sequence([])
         self.write_and_acquire(len_set)
+        self.dsp_status_check_clipped(False)
         self.log("Pushing static control values to chip (should be no-op)", stdout=True)
         len_set = self.static_box(self.in_level, self.imag_clip)
         self.write_and_acquire(len_set)
+        self.dsp_status_check_clipped(False)
         self.check_fwd()
         cav = self.data_array[self.CAV] * 1j
         cav_mean = numpy.mean(cav)
         cav_norm = cav / cav_mean
         cav_std_r = numpy.std(cav_norm.real)
         cav_std_i = numpy.std(cav_norm.imag)
-        cav_mean_mvpm = abs(cav_mean) / self.adc_fs * self.cav_scale
+        cav_mean_mvpm = abs(cav_mean) * self.cav_scale
         cav_print = cav_mean.real, cav_mean.imag, cav_mean_mvpm, cav_std_r, cav_std_i
-        self.log("cavity mean %.1f%+.1fj (%.3f MV/m)  std %.5f %.5fj" % cav_print, stdout=True)
+        self.log("cavity mean %.6f%+.6fj (%.3f MV/m)  std %.5f %.5fj" % cav_print, stdout=True)
         if cav_std_r < 0.0012 and cav_std_i < 0.0012:
             self.log("\nPASS", stdout=True)
         else:
