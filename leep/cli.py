@@ -109,6 +109,8 @@ def gentemplate(args, dev):
         if len(name) == 0:
             _log.warn("Zero length register name")
             continue
+        elif name=='__metadata__':
+            continue
         components = {
             'access': info.get('access', ''),
             'type': 'scalar' if info.get('addr_width', 0) == 0 else 'array',
