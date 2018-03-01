@@ -224,6 +224,7 @@ class c_setup_master:
         isd = interpret_slow_data(aux, abi_ver=self.slow_abi_ver)
         header = datetimestr + " %d %d" % (isd[0], isd[5])  # circle_count and time_stamp
         fname = "%s/auto_%3.3d.dat" % (self.data_dir, self.qnum)
+        self.qnum += 1
         numpy.savetxt(fname, numpy.asarray(res).T, fmt="%d", header=header)
         self.log("Wrote file %s" % fname)
         self.dsp_status = isd[6]
