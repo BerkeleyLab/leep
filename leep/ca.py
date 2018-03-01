@@ -54,7 +54,7 @@ class CADevice(DeviceBase):
         # {'reg_name:{'base_addr':0, ...}}
         self.regmap = json.loads(zlib.decompress(caget(self.prefix+'CTRL_JSON')))
 
-        self._S = None # placeholder for subscription
+        self._S = None  # placeholder for subscription
         # Event acts as a cache for the last received value.
         # This cache is _cleared_ each time a value is returned by Wait()
         self._E = Event()
@@ -137,9 +137,9 @@ class CADevice(DeviceBase):
         # enable/disable for even/odd channels are actually aliases
         # so disable first, then enable
         if disable:
-            [self.pv_write('circle_data', 'enable%d'%ch, 'Disable') for ch in disable]
+            [self.pv_write('circle_data', 'enable%d' % ch, 'Disable') for ch in disable]
         if chans:
-            [self.pv_write('circle_data', 'enable%d'%ch, 'Enable') for ch in chans]
+            [self.pv_write('circle_data', 'enable%d' % ch, 'Enable') for ch in chans]
 
     def wait_for_acq(self, toggle_tag=False, tag=False, timeout=5.0, instance=[]):
         """Wait for next waveform acquisition to complete.
@@ -189,7 +189,7 @@ class CADevice(DeviceBase):
         chans may be a bit mask or a list of channel numbers
         """
         I = self.instance + instance
-        ret = caget([self.pv_name('circle_data', 'input%d'%ch) for ch in chans], format=FORMAT_TIME)
+        ret = caget([self.pv_name('circle_data', 'input%d' % ch) for ch in chans], format=FORMAT_TIME)
         if len(ret) >= 2 and not all([ret[0].raw_stamp == R.raw_stamp for R in ret[1:]]):
             raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in ret])
         ret = [ch*130810.93 for ch in ret]  # TODO: fix scaling
@@ -198,7 +198,7 @@ class CADevice(DeviceBase):
 
     def get_timebase(self, chans=[], instance=[]):
         I = self.instance + instance
-        ret = caget([self.pv_name('circle_data', 'time%d'%ch) for ch in chans], format=FORMAT_TIME)
+        ret = caget([self.pv_name('circle_data', 'time%d' % ch) for ch in chans], format=FORMAT_TIME)
         if len(ret) >= 2 and not all([ret[0].raw_stamp == R.raw_stamp for R in ret[1:]]):
             raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in ret])
         return ret
