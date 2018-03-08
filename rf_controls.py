@@ -80,8 +80,8 @@ class c_setup_master:
         self.save_all_buffers = save_all_buffers
         self.slow_abi_ver = 0
         try:
-            self.slow_abi_ver = self.regmap["__metadata__"]["slow_abi_ver"]
-        except:
+            self.slow_abi_ver = self.rfs.regmap["__metadata__"]["slow_abi_ver"]
+        except KeyError:
             pass
 
         self.dt = 1  # fake for now
@@ -225,7 +225,7 @@ class c_setup_master:
         header = datetimestr + " %d %d" % (isd[0], isd[5])  # circle_count and time_stamp
         fname = "%s/auto_%3.3d.dat" % (self.data_dir, self.qnum)
         self.qnum += 1
-        numpy.savetxt(fname, numpy.asarray(res).T, fmt="%d", header=header)
+        numpy.savetxt(fname, numpy.asarray(res).T, fmt="%.7f", header=header)
         self.log("Wrote file %s" % fname)
         self.dsp_status = isd[6]
 
@@ -249,7 +249,7 @@ class c_setup_master:
 
         while True:
             tag_match, slow_data, time_now = self.rfs.wait_for_acq(tag=tag, toggle_tag=toggle_tag)
-            datetimestr = str(time.strftime("%Y%m%d", time.localtime(time_now)))
+            datetimestr = time_now.isoformat()+"Z"
             channels = self.rfs.get_channels(channel_mask)
             toggle_tag = False
 
@@ -692,7 +692,7 @@ class c_setup_master:
         self.log("\nOpening up control span", stdout=True)
         # given theta = 2*pi*7/33, z = exp(i*theta), and a = 1/16,
         # CORDIC gain = \prod_n \sqrt{1+4^{-n}} = 1.646760
-        # lo = 74694/2^17 * CORDIC gain = 0.938439
+        # lo = 74762/2^17 * CORDIC gain = 0.938439
         # fwashout gain = abs(1+a/(1-a-z)) = 1.031391
         # fdownconvert gain = lo * sin(theta) = 0.911986
         fdbk_scale = 0.774483  # fwashout gain * fdownconvert gain * CORDIC gain / 2

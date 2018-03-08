@@ -4,7 +4,7 @@ _log = logging.getLogger(__name__)
 
 import json
 import zlib
-import time
+import datetime
 
 import numpy
 
@@ -164,7 +164,7 @@ class CADevice(DeviceBase):
 
         while True:
             slow = self._E.Wait(timeout=timeout)
-            now = time.time()
+            now = datetime.datetime.utcnow()
 
             tag_old = slow[34]
             tag_new = slow[33]

@@ -13,7 +13,7 @@ import socket
 import random
 import zlib
 import json
-import time
+from datetime import datetime
 
 from .base import DeviceBase, IGNORE, WARN, ERROR
 
@@ -26,7 +26,7 @@ def yscale(wave_samp_per=1):
     try:
         from math import ceil, log
 
-        lo_cheat = (74694*1.646760258)/2**17
+        lo_cheat = (74762*1.646760258)/2**17
 
         shift_base = 4
         cic_period = 33
@@ -41,8 +41,9 @@ def yscale(wave_samp_per=1):
         shift_min = log2(cic_n**2 * lo_cheat)-12
 
         wave_shift = max(0, ceil(shift_min/2))
+        adc_fs = 16 * lo_cheat * (33 * wave_samp_per)**2 * 4**(8 - wave_shift)/512.0/(2**shift_base)
 
-        return wave_shift, 16 * lo_cheat * (33 * wave_samp_per)**2 * 4**(8 - wave_shift)/512.0/(2**shift_base)
+        return wave_shift, adc_fs
     except Exception as e:
         raise RuntimeError("yscale(%s) %s" % (wave_samp_per, e))
 
@@ -153,7 +154,7 @@ class LEEPDevice(DeviceBase):
         If tag=True, then wait for the next acquisition which includes the
         side-effects of all preceding register writes
         """
-        start = time.time()
+        start = datetime.utcnow()
 
         T, = self.reg_read(['dsp_tag'], instance=instance)
         if tag or toggle_tag:
@@ -169,8 +170,10 @@ class LEEPDevice(DeviceBase):
             self.reg_write([('circle_buf_flip', mask)], instance=None)
 
             while True:
-                now = time.time()
-                if now-start >= timeout:
+                now = datetime.utcnow()
+                delta = now-start
+                delta_us = delta.seconds + delta.microseconds/1e6
+                if delta_us >= timeout:
                     raise RuntimeError('Timeout')
 
                 # TODO: use exchange() and optimize to fetch slow_data[33] as well
@@ -196,6 +199,7 @@ class LEEPDevice(DeviceBase):
 
             _log.debug('Acquire retry')
 
+        # datetimestr = now.isoformat()+'Z'
         return tag_match, slow, now
 
     def get_channels(self, chans=[], instance=[]):

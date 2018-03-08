@@ -23,27 +23,24 @@ def reg_read_value(mg, alist):
         # print "rrv2",len(result)
     return result
 
-def interpret_slow_data(slow_data, abi_ver=0):
+def interpret_slow_data(slow, abi_ver=0):
         # circle_count, circle_stat, adc1_min, adc1_max, adc2_min, adc2_max, adc3_min, adc3_max, tag_now, tag_old, timestamp
         # if abi_ver >= 1, dsp_status is inserted after tag_old
-    circle_count = slow_data[0]*256+slow_data[1]
-    circle_stat = slow_data[2]*256+slow_data[3]
-    tag_now = slow_data[16]
-    tag_old = slow_data[17]
-    # Three channels of ADC min/max
-    mm = [slow_data[ix]*256+slow_data[ix+1] for ix in range(4, 16, 2)]
-    mm = [m-65536 if m > 32767 else m for m in mm]
-    # (almost) 64-bit timestamp
-    time_stamp = 0
-    ts_base = 25 if abi_ver < 1 else 27
-    for ix in range(8):
-        time_stamp = time_stamp*256 + slow_data[ts_base-ix]
-    time_stamp = time_stamp/32
+
+    slow = numpy.asarray(slow, dtype='u1').tostring()  # cast to byte array discards always zero MSBs
+    circle_count, circle_stat = numpy.fromstring(slow[17:21], dtype='>u2')
+    mm = numpy.fromstring(slow[21:33], dtype='>i2')
+    tag_now = ord(slow[33])
+    tag_old = ord(slow[34])
+    ix = 35
     if abi_ver >= 1:
-        dsp_status = slow_data[18]*256+slow_data[19]
-        # print("dsp_status %x" % dsp_status)
+        dsp_status = long(numpy.fromstring(slow[ix:ix+2], dtype='>u2')[0])
+        ix += 2
     else:
         dsp_status = 0  # not sure this is the best choice
+
+    time_stamp = long(numpy.fromstring(slow[ix+7:ix-1:-1], dtype='>u8')[0])/32
+
     return circle_count, circle_stat, mm, tag_now, tag_old, time_stamp, dsp_status
 
 def iq_buf_collect(prc, chcount, npt, cav_mask=1, verbose=False):
