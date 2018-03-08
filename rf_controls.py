@@ -8,6 +8,7 @@ import logging
 import time
 from sel_waves import interpret_slow_data
 from fitter import fitter, create_basist, fpga_regs
+from cav_energy import rev_area, cav_eval
 
 _log = logging.getLogger(__name__)
 
@@ -276,6 +277,31 @@ class c_setup_master:
         self.log("check_fwd: magnitude %.5f (%.3f kW), end of pulse at %d" % (mx, 1e-3*fwd_watts, ex), stdout=verbose)
         return ex
 
+    def check_rev(self, ex):
+        data = self.data_array
+        fwdm = abs(data[self.FWD])
+        revm = abs(data[self.REV])
+        cavm = abs(data[self.CAV])
+        pf = (fwdm*self.fwd_scale)**2
+        pr = (revm*self.rev_scale)**2
+        if ex > 1024-74:
+            print('cav_energy: insufficient decay data, ex=%d' % ex)
+            return
+        # Analysis takes place in units of Watts and unitless time step
+        r, raw_area, raw_bw = rev_area(pf, pr, ex, plot=False, verbose=False)
+        dt = 2*self.wsp*33*14/1320e6
+        bw = raw_bw/dt/(2*numpy.pi)
+        self.log('Edge detected at %d, refined to %.2f, bandwidth %.2f Hz' % (ex, r, bw))
+        energy = raw_area * dt  # Joules
+        gconvert = 2.875  # MV/sqrt(J),  sqrt(RoverQ*(f0*2*pi))
+        book_l = 1.038  # m, cavity length, arguably fiction
+        gradient = numpy.sqrt(energy) * gconvert / book_l
+        self.log('Exponential area %.2f Joules, %.2f MV/m' % (energy, gradient))
+        cav0 = cav_eval(cavm, r)
+        cav_scale = gradient/cav0
+        plist = (cav0, cav_scale, self.cav_scale)
+        self.log('Cavity at that point measured %.4f, scaling %.2f MV/m (given %.2f MV/m)' % plist)
+
     # arange for amplitude printout
     # prange for phase fitting (frequency offset)
     # drange for log amplitude fitting (decay time)
@@ -301,7 +327,9 @@ class c_setup_master:
 
     def usual_find_slope(self, verbose=True):
         s = self.start
-        return self.find_slope(range(0, s), range(s, s+50), range(s, s+50), verbose=verbose)
+        slp = self.find_slope(range(0, s), range(s, s+50), range(s, s+50), verbose=verbose)
+        self.check_rev(s)
+        return slp
 
     def find_ph_offset(self):
         cav = self.data_array[self.CAV]

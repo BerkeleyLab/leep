@@ -41,7 +41,7 @@ def fitter(cav, fwd, basist, dt=1, plotme=False, axes=None, dest={}):
     basisn = numpy.hstack([-cave.imag, cave.real])  # a.imag repeated
     basis = numpy.vstack([basis1, basis2, basis3, basisn])
     # print goal.shape, basis.shape
-    (fitc, resid, rank, sing) = numpy.linalg.lstsq(basis.T, goal)
+    (fitc, resid, rank, sing) = numpy.linalg.lstsq(basis.T, goal, rcond=-1)
     mr = fitc[0]+1j*fitc[1]
     # print rank, fitc[:3],
     if axes is not None or "fitr" in dest:
@@ -68,6 +68,27 @@ def fitter(cav, fwd, basist, dt=1, plotme=False, axes=None, dest={}):
                 axes[1].plot(tt, detune/2/pi, label='Fit')
                 # pyplot.show()
     return mr, rank, fitc[:3]
+
+
+# Find Lorentz coefficient by curve-fitting
+#   Works because there's a nice broad-band term,
+#   and the excitation term is relatively narrow-band
+# g: cavity field in MV/m
+# ssmi: state-space model imaginary part in Hz
+def fit_lorentz(g, ssmi, plot=False):
+    fit_x = g[2:-1]**2
+    fit_y = ssmi[2:]
+    pp = numpy.polyfit(fit_x, fit_y, 1)
+    g_squared = numpy.polyval(pp, g**2)
+    lor_coeff = -pp[0]  # Hz/(MV/m)^2
+    lor_label = "%.0f - %.2f*Gradient^2" % (pp[1], lor_coeff)
+    if plot:  # messes up later plots when run from fitter_test.py
+        pyplot.figure(2)
+        pyplot.plot(fit_x, fit_y)
+        pyplot.plot(fit_x, numpy.polyval(pp, fit_x))
+        pyplot.title(lor_label)
+        pyplot.show()
+    return g_squared, lor_label, lor_coeff
 
 
 # see data-20170518/README and digaree/initgen_srf.py
