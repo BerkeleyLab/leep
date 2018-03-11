@@ -41,7 +41,7 @@ def acquire(args, dev):
         pylab.figure()
     dev.set_channel_mask(args.channels)
     if dev.backend == 'ca':
-        dev.pv_write('circle_data', 'acqmode', 'Normal')
+        dev.pv_write('circle_data', 'acqmode', 'Normal', wait=False)
     dev.wait_for_acq(tag=args.tag, toggle_tag=args.toggle)
     for T, ch in zip(dev.get_timebase(args.channels),
                      dev.get_channels(args.channels)):
