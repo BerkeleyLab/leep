@@ -23,6 +23,8 @@ be32 = numpy.dtype('>u4')
 be16 = numpy.dtype('>u2')
 
 def yscale(wave_samp_per=1):
+    # Note that changes to the output of this function
+    # need to be reflected in testsub.cpp
     try:
         from math import ceil, log
 
