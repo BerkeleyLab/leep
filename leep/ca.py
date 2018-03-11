@@ -38,7 +38,7 @@ class CADevice(DeviceBase):
     def __init__(self, addr, timeout=5.0, **kws):
         DeviceBase.__init__(self, **kws)
         self.timeout = timeout
-        assert self.timeout > 0.0, self.timeout
+        assert self.timeout > 0.1, self.timeout # must be reasonable
         self.prefix = str(addr)  # PV prefix
 
         # fetch mapping from register name to info dict
@@ -76,11 +76,11 @@ class CADevice(DeviceBase):
         pvname = self.pv_name(name, tag, instance=instance)
         return caget(pvname, timeout=self.timeout)
 
-    def pv_write(self, name, tag, value, instance=[], wait=True):
+    def pv_write(self, name, tag, value, instance=[], wait=True, timeout=None):
         """Write associated PV
         """
         pvname = self.pv_name(name, tag, instance=instance)
-        caput(pvname, value, wait=wait, timeout=self.timeout)
+        caput(pvname, value, wait=wait, timeout=timeout or self.timeout)
 
     def reg_write(self, ops, instance=[]):
         for name, value in ops:
