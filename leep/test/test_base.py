@@ -24,7 +24,7 @@ class TestingDevice(DeviceBase):
             },
         }
 
-class TestXXX(unittest.TestCase):
+class TestTGEN(unittest.TestCase):
     def test_assemble(self):
         D = TestingDevice()
         prog = D.assemble_tgen([
@@ -38,6 +38,24 @@ class TestXXX(unittest.TestCase):
         self.assertListEqual(zeros, [0]*len(zeros))
         self.assertListEqual(prog, [
             0xabcd, 0x20200, 0x1234, 0x5678,
+            0,      0x30300, 0x0102, 0x0304,
+            0,      0x30301, 0x0506, 0x0708,
+        ])
+
+    def test_long_sleep(self):
+        D = TestingDevice()
+        prog = D.assemble_tgen([
+            ('set', 'test1', 0x12345678),
+            ('sleep', 0x1abcd),
+            ('set', 'test2[0]', 0x01020304),
+            ('set', 'test2[1]', 0x05060708),
+        ])
+
+        prog, zeros = prog[:16], prog[16:]
+        self.assertListEqual(zeros, [0]*len(zeros))
+        self.assertListEqual(prog, [
+            0xffff, 0x20200, 0x1234, 0x5678,
+            0xabce, 0x20200, 0x1234, 0x5678,
             0,      0x30300, 0x0102, 0x0304,
             0,      0x30301, 0x0506, 0x0708,
         ])

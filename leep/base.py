@@ -250,8 +250,15 @@ class DeviceBase(object):
                         raise RuntimeError('sleep must not follow sleep')
                     elif delay == 0:
                         continue
-                    elif delay > 0xffff:
-                        raise RuntimeError('sleep delay too long, must be <=0xffff')
+
+                    while delay > 0xffff:
+                        # too long for a single instruction.
+                        # repeat write with max delay until
+                        # long enough.
+                        delay -= 0xffff
+
+                        ret[-4] = 0xffff
+                        ret.extend(ret[-4:])
 
                     # set delay of previous instruction
                     ret[-4] = delay
