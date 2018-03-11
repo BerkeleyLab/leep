@@ -189,10 +189,23 @@ class CADevice(DeviceBase):
         chans may be a bit mask or a list of channel numbers
         """
         I = self.instance + instance
-        ret = caget([self.pv_name('circle_data', 'input%d' % ch) for ch in chans], format=FORMAT_TIME)
-        if len(ret) >= 2 and not all([ret[0].raw_stamp == R.raw_stamp for R in ret[1:]]):
-            raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in ret])
-        return ret
+
+        names  = [self.pv_name('circle_data', 'input%d' % ch) for ch in chans]
+        names += [self.pv_name('circle_data', 'scale%d' % ch) for ch in chans]
+
+        ret = caget(names, format=FORMAT_TIME)
+
+        wfs, scales = ret[:len(chans)], ret[len(chans):]
+        print('scales', scales)
+        for wf, scale in zip(wfs, scales):
+            # reverse scaling applied in IOC to give [0, 1) scale
+            wf /= scale
+
+        # ensure that waveform timestamps are consistent
+        if len(wfs) >= 2 and not all([wfs[0].raw_stamp == R.raw_stamp for R in wfs[1:]]):
+            raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in wfs])
+
+        return wfs
 
     def get_timebase(self, chans=[], instance=[]):
         I = self.instance + instance
