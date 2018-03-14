@@ -887,10 +887,9 @@ def get_conf(args, log_root='beg_'):
 
     return conf
 
-
 def usage():
-    print("Usage: python beg2.py -a $IP -w 255 -z 1")
-    print("Better: python beg2.py -j foo.json")
+    print("Usage: python rf_controls.py -a $IP -d 255 -z 1")
+    print("Better: python rf_controls.py -j foo.json")
 
 
 if __name__ == '__main__':
