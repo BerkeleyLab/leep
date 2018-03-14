@@ -45,11 +45,13 @@ def adc_config(wave_samp_per, wave_shift=None):
     return adc_fs, wave_shift
 
 
-class c_setup_master:
+class c_rf_controls:
 
     def __init__(self, conf, save_all_buffers=False):
 
         import leep
+
+        logging.basicConfig(level=conf['debug'])
 
         for key in conf:
             setattr(self, key, conf[key])
@@ -118,6 +120,14 @@ class c_setup_master:
         self.fwd_scale = numpy.sqrt(self.fwd_fs*1000)  # convert dimensionless fraction of full-scale to sqrt(W)
         self.rev_scale = numpy.sqrt(self.rev_fs*1000)  # convert dimensionless fraction of full-scale to sqrt(W)
         self.cav_scale = self.cav_fs  # convert dimensionless fraction of full-scale to MV/m
+
+        # Basic controller setup
+        self.sel_set = [('sel_en', 1)]
+        self.base_set = [
+            ('sel_en', 0),
+            ('ph_offset', 0),
+        ]
+        self.base_set += self.simple_pulse(self.in_level, 240)
 
         self.log("Run configuration:", stdout=True)
         if self.desc is not None:
@@ -831,16 +841,10 @@ class c_setup_master:
             sys.stdout.flush()
 
 
-def usage():
-    print("Usage: python beg2.py -a $IP -w 255 -z 1")
-    print("Better: python beg2.py -j foo.json")
-
-
-if __name__ == '__main__':
-    # maybe wrong in theory, but successfully lets this program
-    # print its its fancy unicode symbols to pipes and redirects
-    sys.stdout = codecs.getwriter('utf8')(sys.stdout)
-
+def get_conf(args, log_root='beg_'):
+    """
+    Generate configuration dictionary based on defaults and command-line arguments
+    """
     # default values
     conf = dict(
         desc=None,
@@ -861,6 +865,39 @@ if __name__ == '__main__':
         lp_bw=150e3,    # Hz Low-pass filter bandwidth
         notch_f=None  # Hz notch filter frequency
     )
+
+    # Remove defaulted arguments, defaults are set on conf dictionary
+    args = {key: value for key, value in args.items() if value is not None}
+
+    # Overwrite defaults with configuration in JSON file
+    if 'json_file' in args:
+        json_dict = json.load(open(args['json_file'], 'r'))
+        conf.update((k, json_dict[k]) for k in conf.viewkeys() & json_dict.viewkeys())
+
+    # Update configuration dictionary with values passed from the command line
+    # Command-line arguments take priority over JSON file settings
+    conf.update(args)
+
+    data_dir = start_time.strftime(log_root + '%Y%m%d_%H%M%S')
+    os.mkdir(data_dir)
+    conf['data_dir'] = data_dir
+
+    if conf['mode_center'] is None:
+        conf['prc_ip'] = None
+
+    return conf
+
+
+def usage():
+    print("Usage: python beg2.py -a $IP -w 255 -z 1")
+    print("Better: python beg2.py -j foo.json")
+
+
+if __name__ == '__main__':
+    # maybe wrong in theory, but successfully lets this program
+    # print its its fancy unicode symbols to pipes and redirects
+    sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+
     save_all_buffers = False  # not appropriate for JSON file
     # process command line
     from argparse import ArgumentParser
@@ -884,28 +921,10 @@ if __name__ == '__main__':
 
     # Get dictionary with command-line arguments
     args = vars(parser.parse_args())
-    # Remove defaulted arguments, defaults are set on conf dictionary
-    args = {key: value for key, value in args.items() if value is not None}
 
-    # Overwrite defaults with configuration in JSON file
-    if 'json_file' in args:
-        json_dict = json.load(open(args['json_file'], 'r'))
-        conf.update((k, json_dict[k]) for k in conf.viewkeys() & json_dict.viewkeys())
+    conf = get_conf(args)
 
-    # Update configuration dictionary with values passed from the command line
-    # Command-line arguments take priority over JSON file settings
-    conf.update(args)
-
-    logging.basicConfig(level=conf['debug'])
-
-    data_dir = start_time.strftime('beg_%Y%m%d_%H%M%S')
-    os.mkdir(data_dir)
-    conf['data_dir'] = data_dir
-
-    if conf['mode_center'] is None:
-        conf['prc_ip'] = None
-
-    master = c_setup_master(conf, save_all_buffers=conf['save_all_buffers'])
+    master = c_rf_controls(conf, save_all_buffers=conf['save_all_buffers'])
     master.configure_fpga()
 
     for key in ['zone', 'loopback', 'mode_center']:
