@@ -87,6 +87,13 @@ def dumpjson(args, dev):
     json.dump(dev.regmap, sys.stdout, indent=2)
     sys.stdout.write('\n')
 
+def dumpdrv(args, dev):
+    if dev.backend!='ca':
+        _log.error("Only 'ca' backend supports, not '%s'", dev.backend)
+        sys.exit(1)
+    json.dump(dev._info, sys.stdout, indent=2)
+    sys.stdout.write('\n')
+
 class MapDirect(object):
 
     def __call__(self, name):
@@ -190,6 +197,9 @@ def getargs():
 
     S = SP.add_parser('json', help='print json')
     S.set_defaults(func=dumpjson)
+
+    S = SP.add_parser('drvinfo', help='print drive info json (ca:// only)')
+    S.set_defaults(func=dumpdrv)
 
     S = SP.add_parser('template', help='Generate MSI substitutions file')
     S.set_defaults(func=gentemplate)

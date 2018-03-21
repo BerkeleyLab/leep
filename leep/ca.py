@@ -54,6 +54,11 @@ class CADevice(DeviceBase):
         # {'reg_name:{'base_addr':0, ...}}
         self.regmap = json.loads(zlib.decompress(caget(self.prefix+'CTRL_JSON')))
 
+        extra_reg =set(self._info) - set(self.regmap)
+        if extra_reg:
+            # inject empty info for fake/missing registers
+            self.regmap.update([(K, {}) for K in extra_reg])
+
         self._S = None  # placeholder for subscription
         # Event acts as a cache for the last received value.
         # This cache is _cleared_ each time a value is returned by Wait()
