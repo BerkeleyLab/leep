@@ -866,7 +866,7 @@ def get_conf(args, log_root='beg_'):
         rev_fs=10.0,    # kW
         cav_fs=40.0,    # MV/m
         cav_goal=5.8,   # MV/m
-        detune_fq=0.002,  # Hz frequency quantum, user choice
+        detune_fq=0.008,  # Hz frequency quantum, user choice
         lp_bw=150e3,    # Hz Low-pass filter bandwidth
         notch_f=None  # Hz notch filter frequency
     )
