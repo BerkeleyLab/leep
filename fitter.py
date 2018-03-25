@@ -104,4 +104,8 @@ def fpga_regs(mr, fq, dt):
         mr.imag / ffs,
         invT / ffs,
         32768]
-    return [int(round(sf[kx])) for kx in range(4)]
+    sff = [int(round(x)) for x in sf]
+    ok = all([abs(x) < 2**23 for x in sff])
+    if not ok:
+        sff = None
+    return sff

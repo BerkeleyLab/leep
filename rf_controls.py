@@ -295,10 +295,14 @@ class c_rf_controls:
         pf = (fwdm*self.fwd_scale)**2
         pr = (revm*self.rev_scale)**2
         if ex > 1024-74:
-            print('cav_energy: insufficient decay data, ex=%d' % ex)
+            self.log('check_rev: insufficient decay data, ex=%d' % ex)
             return
         # Analysis takes place in units of Watts and unitless time step
-        r, raw_area, raw_bw = rev_area(pf, pr, ex, plot=False, verbose=False)
+        try:
+            r, raw_area, raw_bw = rev_area(pf, pr, ex, plot=False, verbose=False)
+        except:
+            self.log('check_rev: exception in rev_area()')
+            return
         dt = 2*self.wsp*33*14/1320e6
         bw = raw_bw/dt/(2*numpy.pi)
         self.log('Edge detected at %d, refined to %.2f, bandwidth %.2f Hz' % (ex, r, bw))
@@ -309,7 +313,7 @@ class c_rf_controls:
         self.log('Exponential area %.2f Joules, %.2f MV/m' % (energy, gradient))
         cav0 = cav_eval(cavm, r)
         cav_scale = gradient/cav0
-        plist = (cav0, cav_scale, self.cav_scale)
+        plist = cav0, cav_scale, self.cav_scale
         self.log('Cavity at that point measured %.4f, scaling %.2f MV/m (given %.2f MV/m)' % plist)
 
     # arange for amplitude printout
@@ -375,7 +379,7 @@ class c_rf_controls:
         ny = basist.shape[0]+1
         mr, rank, fitc = fitter(cav[4:ny+4], fwd[4:ny+4], basist=basist, dt=self.dt)
         sf = fpga_regs(mr, fq=self.detune_fq, dt=self.digaree_Tstep)
-        self.log("model %.3f%+.3fj /s  %s" % (mr.real, mr.imag, repr(sf)))
+        self.log("model %.3f%+.3fj /s  fq=%f  %s" % (mr.real, mr.imag, self.detune_fq, repr(sf)))
         return mr
 
     def handle_mr_set(self, mr_set):
@@ -385,7 +389,7 @@ class c_rf_controls:
         self.log(u"handle_mr_set: %d points, median mag %.2f, phase %5.1f\u00b0" % mr_print, stdout=True)
         mr = mr_amp * numpy.exp(1j*mr_pha)
         sf = fpga_regs(mr, fq=self.detune_fq, dt=self.digaree_Tstep)
-        self.log("model %.3f%+.3fj /s  %s" % (mr.real, mr.imag, repr(sf)))
+        self.log("model %.3f%+.3fj /s  fq=%f  %s" % (mr.real, mr.imag, self.detune_fq, repr(sf)))
         return sf
         # This is the result that should be sent to the hardware
 
@@ -445,12 +449,12 @@ class c_rf_controls:
         y_high_start = min(y_high)
         y_high_end = max(y_high)
         self.log("Loopback analysis:", stdout=True)
-        self.log("  Loopback mean on/off = %.5f/%.5f" % (y_on_mean, y_off_mean), stdout=True)
-        self.log("  Loopback std. on/off = %.5f/%.5f" % (y_on_std, y_off_std), stdout=True)
+        self.log("  Loopback mean on/off = %.6f/%.6f" % (y_on_mean, y_off_mean), stdout=True)
+        self.log("  Loopback std. on/off = %.6f/%.6f" % (y_on_std, y_off_std), stdout=True)
         self.log("  Loopback pulse start, end = %d, %d" % (y_high_start, y_high_end), stdout=True)
         if not check:
             return True  # no checks
-        loop_ok = y_on_mean > 4840 and y_on_mean < 7160 and y_off_mean < 3.0 and y_on_std < 0.9 and y_off_std < 0.9
+        loop_ok = y_on_mean > 0.009314 and y_on_mean < 0.01378 and y_off_mean < 8e-6 and y_on_std < y_on_mean*2.5e-4 and y_off_std < 3e-6
         ls = "PASS" if loop_ok else "FAIL"
         self.log("Loopback test finished: %s" % ls, stdout=True)
         return loop_ok
@@ -723,7 +727,8 @@ class c_rf_controls:
             self.check_fwd(verbose=False)
             self.log(self.status_line()+op_str, stdout=True)
         sf = self.handle_mr_set(mr_set)
-        self.push_digaree_coeff(sf)
+        if sf is not None:
+            self.push_digaree_coeff(sf)
 
     ########
     def open_control0(self):
@@ -809,7 +814,7 @@ class c_rf_controls:
             self.set_start()
             delta_f, bw, max_amp = self.usual_find_slope(verbose=False)
             delta_f = delta_f - exact
-            self.log("Measured bandwidth %.3f kHz, net detune %.3f kHz, max amp %.1f" %
+            self.log("Measured bandwidth %6.3f kHz, net detune %.3f kHz, max amp %.5f" %
                      (bw/1000, delta_f/1000, max_amp), stdout=True)
         # DDS phases have been reset by the "if f == 0:" stanza above
         # Depends on bitfile built by commit 9477c2d8 or later
@@ -861,7 +866,7 @@ def get_conf(args, log_root='beg_'):
         rev_fs=10.0,    # kW
         cav_fs=40.0,    # MV/m
         cav_goal=5.8,   # MV/m
-        detune_fq=0.03,  # Hz frequency quantum, user choice
+        detune_fq=0.002,  # Hz frequency quantum, user choice
         lp_bw=150e3,    # Hz Low-pass filter bandwidth
         notch_f=None  # Hz notch filter frequency
     )
