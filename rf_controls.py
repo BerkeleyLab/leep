@@ -303,6 +303,9 @@ class c_rf_controls:
         except:
             self.log('check_rev: exception in rev_area()')
             return
+        if r == 0:
+            self.log('check_rev: rev_area() returned fault')
+            return
         dt = 2*self.wsp*33*14/1320e6
         bw = raw_bw/dt/(2*numpy.pi)
         self.log('Edge detected at %d, refined to %.2f, bandwidth %.2f Hz' % (ex, r, bw))

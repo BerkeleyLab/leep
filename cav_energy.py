@@ -33,6 +33,10 @@ def rev_area(pf, pr, ex, plot=False, verbose=False):
         int_l = (t-tl)*pk[1] + 0.5*(t**2-tl**2)*pk[0]
         int_r = exp(pp[1]) * (exp(pp[0]*tr) - exp(pp[0]*t)) / pp[0]
         return int_l+int_r-os
+    if area_match(tl) * area_match(tr) > 0:
+        if verbose:
+            print("rev_area:  No sign flip?  Aborting.")
+        return 0, 0, 0
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html
     r = brentq(area_match, tl, tr)
     area = - exp(pp[1]+pp[0]*r) / pp[0]
@@ -74,9 +78,9 @@ def cav_eval(y, r):
 
 
 def cav_energy(data, plot=False):
-    FWD = 1
-    REV = 2
-    CAV = 3
+    FWD = 0
+    REV = 1
+    CAV = 2
     fwdm = abs(data[FWD])  # forward wave magnitude
     revm = abs(data[REV])
     cavm = abs(data[CAV])
@@ -86,13 +90,14 @@ def cav_energy(data, plot=False):
         return
     # Static calibration for testing only, but at least it's consistent with
     # 9d226fdbdb0824e330127692af59f1cb57f9eeb9475831054ad00b6c65911c92  fitter_dat/auto_001.dat
-    adc_fs = 519636.5
     fwd_fs = 11.97  # kW
     rev_fs = 10.48  # kW
-    pf = (fwdm/adc_fs)**2 * fwd_fs * 1000
-    pr = (revm/adc_fs)**2 * rev_fs * 1000
+    pf = fwdm**2 * fwd_fs * 1000
+    pr = revm**2 * rev_fs * 1000
     # Analysis takes place in units of Watts and unitless time step
     r, raw_area, raw_bw = rev_area(pf, pr, ex, plot=plot, verbose=True)
+    if r == 0:
+        return
     wsp = 255  # more static cal
     dt = 2*wsp*33*14/1320e6
     bw = raw_bw/dt/(2*pi)
@@ -102,7 +107,7 @@ def cav_energy(data, plot=False):
     book_l = 1.038  # m, cavity length, arguably fiction
     gradient = sqrt(energy) * gconvert / book_l
     print('Exponential area %.2f Joules, %.2f MV/m' % (energy, gradient))
-    cav0 = cav_eval(abs(cavm)/adc_fs, r)
+    cav0 = cav_eval(abs(cavm), r)
     cav_scale = gradient/cav0
     print('Cavity at that point measured %.4f, scaling %.2f MV/m' % (cav0, cav_scale))
 
