@@ -3,116 +3,204 @@
 import logging
 _log = logging.getLogger(__name__)
 
+import time
+import sys
+import os
+import re
+import json
 import signal
 import subprocess as sp
 import cothread
 import cothread.catools as ca
 
-sigchld = object()
+# commands tokens for event queue
+sigchld = "SIGCHLD"
+start = "START"
+stop = "STOP"
+abort = "ABORT"
+join = "JOIN"
+
+# helper to ignore current value of subscription which is the first
+# update sent after (re)connect.
+class Delta(object):
+    def __init__(self, action):
+        self.connected, self.action = False, action
+    def __call__(self, val):
+        if not val.ok:
+            _log.debug("%s disconnect", val.name)
+            self.connected = False
+        elif self.connected:
+            _log.debug("%s update %s", val.name, val)
+            self.action(val)
+        else:
+            _log.debug("%s (re-)connect %s", val.name, val)
+            self.connected = True
 
 class ProcControl(object):
     all_procs = set()
-    def __init__(self, pref, args, **kws):
-        self.pref = pref
-        self.args, self.launch_args = args, kws
+    def __init__(self, pref, args, logto=None, **kws):
+        self.pref = bytes(pref)
+        self.args, self.logto, self.launch_args = args, logto, kws
 
-        # wakeup with: sigchld or a number
-        self.evt = cothread.Event()
+        _log.debug("%s Setup", self.pref)
 
-        # commands are updates w/ a value of 0 or 1
-        self.cmd_sub = ca.camonitor('%sRUN'%self.pref, self.evt.Signal)
-        # wait for, and ignore, initial value
-        self.evt.Wait()
+        # wakeup with one of the command tokens
+        self.evt = cothread.EventQueue()
 
-        ca.caput('%sSTS'%self.pref, 0, wait=True)
+        self.cmd_start = ca.camonitor(b'%sSTRT_'%self.pref, Delta(lambda _val:self.evt.Signal(start)), notify_disconnect=True)
+        self.cmd_stop  = ca.camonitor(b'%sSTOP_'%self.pref, Delta(lambda _val:self.evt.Signal(stop)),  notify_disconnect=True)
+        self.cmd_abort = ca.camonitor(b'%sABRT_'%self.pref, Delta(lambda _val:self.evt.Signal(abort)), notify_disconnect=True)
+
+        ca.caput(b'%sSTS'%self.pref, 0, wait=True)
 
         self.child = None
 
-        self.ca_task = cothread.Spawn(self.run)
+        # our long running task
+        self.ca_task = cothread.Spawn(self.loop)
 
         self.all_procs.add(self)
+        _log.info("%s Ready", self.pref)
 
     def close(self):
-        if self.child is None or self.child.poll() is not None:
-            return
+        self.evt.Signal(abort)
+        self.evt.Signal(join)
         try:
-            self.child.kill()
-        except OSError:
-            _log.exception("%s close()"%self.pref)
-        self.child.wait()
+            self.ca_task.Wait()
+        except:
+            _log.exception("%s close() join"%self.pref)
 
-    def run(self):
-        while True:
-            # wakup on event (SIGCHLD or command), also every 10 seconds for a paranoia status check
-            try:
-                val = self.evt.Wait(10.0)
-            except cothread.Timedout:
-                val = None
+        assert self.child is None or self.child.poll() is not None, (self.child and self.child.poll())
 
-            _log.debug("%s wakeup with %s", self.pref, val)
+    def sigchld(self):
+        self.evt.Signal(sigchld)
 
-            # test/update child status on any wakeup
+    def loop(self):
+        try:
+            while True:
+                val = self.evt.Wait()
+                _log.debug("Wakeup with %s", val)
 
-            if self.child is None:
-                sts = 0 # Crash (really Init)
-                ret = -1
-            else:
-                ret = self.child.poll()
-                _log.debug("%s Child status %s", self.pref, ret)
+                self.check_status()
 
-                if ret is None:
-                    sts = 2 # Running
-                elif ret==0:
-                    sts = 1 # Complete
+                if val == start:
+                    self.handle_start()
+                elif val == stop:
+                    self.handle_stop()
+                elif val == abort:
+                    self.handle_abort()
+                elif val == sigchld:
+                    pass
+                elif val == join:
+                    break
                 else:
-                    sts = 0 # Crash
+                    _log.warn("Spurious wakeup with %s", val)
+        except:
+            _log.exception("%s error in runner", self.pref)
+            raise
 
-            ca.caput('%sSTS'%self.pref, sts, wait=True)
-                
-            if val==1:
-                _log.debug("%s request start", self.pref)
+    def check_status(self):
+        if self.child is None:
+            sts = 0 # Crash (really Init)
+            ret = -1
+        else:
+            ret = self.child.poll()
+            _log.debug("%s Child status %s", self.pref, ret)
 
-                if ret is not None:
-                    _log.debug("%s starting %s %s", self.pref, self.args, self.launch_args)
+            if ret is None:
+                sts = 2 # Running
+            elif ret==0:
+                sts = 1 # Complete
+            else:
+                sts = 0 # Crash
 
-                    self.child = sp.Popen(self.args, **self.launch_args)
+        ca.caput(b'%sSTS'%self.pref, sts, wait=True)
 
-                    ca.caput('%sSTS'%self.pref, 2, wait=True)
+        self.current_status = sts
 
-            elif val==0:
-                _log.debug("%s request stop", self.pref)
+    def handle_start(self):
+        if self.current_status != 2:
+            _log.debug("%s starting %s %s", self.pref, self.args, self.launch_args)
 
-                if ret is None:
-                    _log.debug("%s SIGINT", self.pref)
-                    self.child.send_signal(signal.SIGINT)
+            args = {'stderr':sp.STDOUT}
+            fp = None
 
-            elif val==2:
-                _log.debug("%s request abort", self.pref)
+            try:
+                if self.logto:
+                    _log.debug("Log to '%s'", self.logto)
+                    fp = open(self.logto, 'w')
+                    fp.write('# %s\n# %s\n# --- begin output ---\n'%(self.args, time.ctime()))
+                    args['stdout'] = fp.fileno()
 
-                if ret is None:
-                    _log.debug("%s kill", self.pref)
-                    self.child.kill()
+                args.update(self.launch_args)
+
+                self.child = sp.Popen(self.args, **args)
+
+            finally:
+                if fp is not None:
+                    fp.close()
+
+            ca.caput(b'%sSTS'%self.pref, 2, wait=True)
+
+    def handle_stop(self):
+        if self.current_status == 2:
+            _log.debug("%s SIGINT", self.pref)
+            self.child.send_signal(signal.SIGINT)
+
+    def handle_abort(self):
+        if self.current_status == 2:
+            _log.debug("%s kill", self.pref)
+            self.child.kill()
+
 
 def poke_all():
     _log.debug("SIGCHLD 2")
-    for proc in ProcControl.all_procs:
-        proc.evt.Signal(sigchld)
+    [proc.sigchld() for proc in ProcControl.all_procs]
 
 def handle_child(sig, frame):
     _log.debug("SIGCHLD 1")
     cothread.Callback(poke_all)
 
-signal.signal(signal.SIGCHLD, handle_child)
 
+def getargs():
+    from argparse import ArgumentParser
+    P=ArgumentParser()
+    P.add_argument('config', help='JSON config file')
+    P.add_argument('-d','--debug', action='store_const', const=logging.DEBUG, default=logging.INFO)
+    return P.parse_args()
 
-ProcControl('SLP10:', ['/bin/sleep', '10'])
+def main(args):
+    logging.basicConfig(level=args.debug, format='%(asctime)s %(levelname)s %(message)s')
 
-logging.basicConfig(level=logging.DEBUG)
+    signal.signal(signal.SIGCHLD, handle_child)
 
-try:
-    cothread.WaitForQuit()
-except KeyboardInterrupt:
-    pass
+    confdir = os.path.dirname(args.config)
 
-for proc in ProcControl.all_procs:
-    proc.close()
+    # we work from the directory containing the config file so that
+    # any relative paths it contains will be relative to the
+    # location of the config file
+    os.chdir(confdir or '.')
+
+    with open(args.config, 'r') as F:
+        conf = F.read()
+
+    conf = re.sub('#[^\n\r]*\r?\n', '', conf) # strip '#' comments
+    try:
+        conf = json.loads(conf)
+    except ValueError as e:
+        print conf
+        print 'Syntax Error:', e
+        sys.exit(1)
+
+    for name, sect in conf['procs'].items():
+        ProcControl(name, sect['command'], logto=sect.get('logfile'))
+
+    try:
+        cothread.WaitForQuit()
+    except KeyboardInterrupt:
+        pass
+
+    for proc in ProcControl.all_procs:
+        proc.close()
+
+if __name__=='__main__':
+    main(getargs())
