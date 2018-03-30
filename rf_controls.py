@@ -302,7 +302,7 @@ class c_rf_controls:
             r, raw_area, raw_bw = rev_area(pf, pr, ex, plot=False, verbose=False)
         except:
             self.log('check_rev: exception in rev_area()')
-            return
+            raise
         if r == 0:
             self.log('check_rev: rev_area() returned fault')
             return
