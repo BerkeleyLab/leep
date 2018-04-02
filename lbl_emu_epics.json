@@ -1,7 +1,7 @@
 {
 "desc": "Bldg. 70 test stand",
-"rfs_ip": "192.168.165.44",
-"shell": 1,
+"rfs_addr": "ca://TST00:RFS1A:",
+"zone": 0,
 "fwd_fs": 170,
 "rev_fs": 170,
 "cav_fs": 40.0,
