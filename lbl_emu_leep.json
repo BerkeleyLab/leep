@@ -1,7 +1,7 @@
 {
 "desc": "Bldg. 70 test stand",
-"rfs_addr": "leep://192.168.165.44",
-"zone": 0,
+"rfs_addr": "leep://192.168.165.84",
+"zone": 1,
 "fwd_fs": 170,
 "rev_fs": 170,
 "cav_fs": 40.0,

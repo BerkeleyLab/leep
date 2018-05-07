@@ -498,7 +498,7 @@ class c_rf_controls:
         self.log("y = " + repr(out_level))
         mx = numpy.max(out_level)
         # important that this coefficient is less than cos(3*pi/8)/cos(pi/8) = 0.4142
-        ix = numpy.nonzero(out_level > (mx*0.3))[0]
+        ix = numpy.nonzero(out_level > (mx*0.15))[0]
         if len(ix) < 3:
             self.log("Only %d points above mx*0.3, aborting" % len(ix), stdout=True)
             return None
@@ -578,8 +578,8 @@ class c_rf_controls:
         # but then throw that away for now, because it hasn't been reliable
         pscan = []
         oscan = []
-        for rotx in range(8):
-            r2 = (self.reg_ph_offset + rotx*32768) % 262144
+        for rotx in range(12):
+            r2 = int(self.reg_ph_offset + rotx*21845.3) % 262144
             r2_deg = r2 * 360 / 262144.0
             self.log(u"Full ph_offset scan %d/8: %.1f\u00B0" % (rotx+1, r2_deg))
             op_str = u"  from: ph_off scan %d/8: %5.1f\u00B0" % (rotx+1, r2_deg)
