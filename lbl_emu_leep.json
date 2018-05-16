@@ -10,6 +10,7 @@
 "cav_goal": 5.8,
 "dmax_magn": 0.7,
 "dmax_imag": 0.6,
+"detune_fq" : 0.03,
 "lp_bw":200e3,
 "notch_f":780e3
 }
