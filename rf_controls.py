@@ -76,10 +76,16 @@ class c_rf_controls:
             self.prc = None
 
         # Constants
-        self.FWD = 0
-        self.REV = 1
-        self.CAV = 2
-        self.DRV = 3
+        if self.loop_is_cav:
+            self.CAV = 0
+            self.FWD = 1
+            self.REV = 2
+            self.DRV = 3
+        else:
+            self.FWD = 0
+            self.REV = 1
+            self.CAV = 2
+            self.DRV = 3
         self.save_all_buffers = save_all_buffers
         self.slow_abi_ver = 0
         try:
@@ -135,6 +141,7 @@ class c_rf_controls:
         self.log("  RFS Address %s" % self.rfs_addr, stdout=True)
         if self.prc_ip is not None:
             self.log("  PRC IP %s" % self.prc_ip, stdout=True)
+        self.log("  Config loop_is_cav %s" % self.loop_is_cav, stdout=True)
         self.log("  Config wsp %d" % self.wsp, stdout=True)
         self.log("  Config out_level_goal %.5f" % self.out_level_goal, stdout=True)
         self.log("  Config real_clip %d" % self.real_clip, stdout=True)
@@ -148,22 +155,17 @@ class c_rf_controls:
         self.rfs.reg_write([
             ('bank_next', 0),
         ])
-
         self.rfs.set_decimate(self.wsp)
         self.rfs.set_channel_mask(range(2, 10))
 
         # Initial setup is for loopback, forward, reverse, cavity.
-        # Constants above reflect expectation for that to change, to include drive instead of loopback,
+        # Constants above reflect expectation for that to change,
+        # to include drive instead of loopback,
         # before any real data analysis takes place.
+        # Loopback tests are not possible/meaningful in the loop_is_cav case.
         self.detune_output_enable(False)
 
-        # Basic controller setup
-        self.sel_set = [('sel_en', 1)]
-        self.base_set = [
-            ('sel_en', 0),
-            ('ph_offset', 0),
-        ]
-        self.base_set += self.simple_pulse(self.in_level, 240)
+        # Write basic controller setup
         self.write_and_acquire(self.base_set)
 
     def triple_pulse_core(self, t1, t2, t3, level, maxq, span=0.2, cw=False):
@@ -294,8 +296,8 @@ class c_rf_controls:
         cavm = abs(data[self.CAV])
         pf = (fwdm*self.fwd_scale)**2
         pr = (revm*self.rev_scale)**2
-        if ex > 1024-74:
-            self.log('check_rev: insufficient decay data, ex=%d' % ex)
+        if ex > 1024-74 or max(cavm) < 0.03:
+            self.log('check_rev: insufficient decay data, ex=%d, max_cav=%.5f' % (ex, max(cavm)))
             return
         # Analysis takes place in units of Watts and unitless time step
         try:
@@ -467,10 +469,10 @@ class c_rf_controls:
         self.log("pp = " + repr(pp))
         if pp[0] >= 0:
             self.log("Positive curvature, aborting!", stdout=True)
-            return None
+            return 0, 0, False
         center = -pp[1]/(2*pp[0])
         ant_peak = numpy.polyval(pp, center)
-        return center, ant_peak
+        return center, ant_peak, True
 
     def offset_fit_trig(self, in_val, out_level, include_pedestal=False):
         x = numpy.array(in_val) * 0.5**18 * 2 * numpy.pi
@@ -479,18 +481,34 @@ class c_rf_controls:
         if include_pedestal:
             basis = basis + [1.0+0*x]
         basis = numpy.vstack(basis).T
-        fitc, resid, rank, sing = numpy.linalg.lstsq(basis, y)
+        fitc, resid, rank, sing = numpy.linalg.lstsq(basis, y, rcond=-1)
         err = y - basis.dot(fitc)
         rms = numpy.sqrt(numpy.mean(err**2))
         z = fitc[0] + 1j*fitc[1]
         center = numpy.angle(z) * 2**18 / (2*numpy.pi)
-        ant_peak = numpy.abs(z)
+        pedestal = 0
         print_suffix = ""
         if include_pedestal:
-            ant_peak += fitc[2]
+            pedestal = fitc[2]
             print_suffix = " (using pedestal)"
+        valid_fit = abs(z) > 0.010 and rms < 0.2 * abs(z)
+        if not valid_fit:
+            print_suffix += " BAD!"
         self.log("offset_fit_trig: %.5f%+.5fi  rms error %.5f%s" % (z.real, z.imag, rms, print_suffix), stdout=True)
-        return center, ant_peak
+        if False:  # aid to understanding curve fit, also un-comment pyplot import above
+            print("Pedestal %.5f" % pedestal)
+            zp = numpy.exp(1j*x)*y
+            pyplot.plot(zp.real, zp.imag, '*')
+            zp = numpy.exp(1j*x)*basis.dot(fitc)
+            pyplot.plot(zp.real, zp.imag)
+            zcirc = numpy.exp(numpy.pi*2j*numpy.arange(0, 1.01, 0.01))
+            zp = z*numpy.append(zcirc, 0)
+            zp = zp+pedestal*numpy.exp(1j*numpy.angle(z))
+            pyplot.plot(zp.real, zp.imag)
+            pyplot.plot(0, 0, '*')
+            pyplot.show()
+        ant_peak = numpy.abs(z) + pedestal
+        return center, ant_peak, valid_fit
 
     # Returns best estimate of ph_offset
     def analyze_poffset_scan(self, in_val, out_level, start_offset, check_range=True):
@@ -498,16 +516,20 @@ class c_rf_controls:
         self.log("y = " + repr(out_level))
         mx = numpy.max(out_level)
         # important that this coefficient is less than cos(3*pi/8)/cos(pi/8) = 0.4142
-        ix = numpy.nonzero(out_level > (mx*0.15))[0]
+        athresh = 0.15
+        ix = numpy.nonzero(out_level > (mx*athresh))[0]
         if len(ix) < 3:
-            self.log("Only %d points above mx*0.3, aborting" % len(ix), stdout=True)
+            self.log("Only %d points above mx*%.2f, aborting" % (len(ix), athresh), stdout=True)
             return None
         self.log("analyze_poffset_scan curve fit using %d of %d points" % (len(ix), len(out_level)), stdout=True)
         in_val_subset = [in_val[jx] for jx in ix]
         out_level_subset = [out_level[jx] for jx in ix]
         # center, ant_peak = self.offset_fit_quadratic(in_val_subset, out_level_subset)
         inc_ped = self.wsp < 4  # heuristic based on sel_theory2.m
-        center, ant_peak = self.offset_fit_trig(in_val_subset, out_level_subset, include_pedestal=inc_ped)
+        center, ant_peak, valid_fit = self.offset_fit_trig(in_val_subset, out_level_subset, include_pedestal=inc_ped)
+        if not valid_fit:
+            self.log("Invalid fit (wrong cavity signal?), aborting!", stdout=True)
+            return None
         if check_range:
             self.log("Checking %d < %.1f < %d" % (min(in_val), center, max(in_val)), stdout=True)
             if center > max(in_val) or center < min(in_val):
@@ -544,6 +566,7 @@ class c_rf_controls:
         vstep = 200
         slope = -100000000  # force first time through
         oldslope = slope
+        real_keep = 0xfcc if self.loop_is_cav else 0x3fc
         self.log("\nCoarse-tune with SEL off", stdout=True)
         while abs(slope) > 8000:
             self.log("Piezo set %d" % self.piezo_dc, stdout=True)
@@ -578,11 +601,12 @@ class c_rf_controls:
         # but then throw that away for now, because it hasn't been reliable
         pscan = []
         oscan = []
-        for rotx in range(12):
-            r2 = int(self.reg_ph_offset + rotx*21845.3) % 262144
+        snpt = 10
+        for rotx in range(snpt):
+            r2 = int(self.reg_ph_offset + rotx*262144/snpt + 0.5) % 262144
             r2_deg = r2 * 360 / 262144.0
-            self.log(u"Full ph_offset scan %d/8: %.1f\u00B0" % (rotx+1, r2_deg))
-            op_str = u"  from: ph_off scan %d/8: %5.1f\u00B0" % (rotx+1, r2_deg)
+            self.log(u"Full ph_offset scan %d/%d: %.1f\u00B0" % (rotx+1, snpt, r2_deg))
+            op_str = u"  from: ph_off scan %d/%d: %5.1f\u00B0" % (rotx+1, snpt, r2_deg)
             self.write_and_acquire(self.sel_set + [('ph_offset', r2)])
             self.out_level = self.find_level(verbose=False)
             # self.log("  output level %.1f" % self.out_level, stdout=True)
@@ -593,7 +617,7 @@ class c_rf_controls:
             self.find_model()
             self.log(self.status_line()+op_str, stdout=True)
         best_ix = oscan.index(max(oscan))
-        self.log("Best index %d for maximum output %.1f" % (best_ix, max(oscan)))
+        self.log("Best index %d for maximum output %.5f" % (best_ix, max(oscan)))
         self.reg_ph_offset = (self.reg_ph_offset + best_ix*8192) % 262144
         self.reg_ph_offset = self.analyze_poffset_scan(pscan, oscan, 0.0, check_range=False)
         if self.reg_ph_offset is None:
@@ -632,8 +656,8 @@ class c_rf_controls:
         start_offset = self.reg_ph_offset
         in_vals = []
         self.out_levels = []
-        phase_step = 22.5  # degrees
-        num_steps = 2  # on each side of zero
+        phase_step = 18  # degrees
+        num_steps = 3  # on each side of zero
         for ox in range(-num_steps, num_steps+1):
             # one degree is 728.2 counts
             phase_shift = ox*728*phase_step
@@ -798,6 +822,7 @@ class c_rf_controls:
             # print("n1, n2 = %d %d" % (n1, n2))
             exact = (n1 + 868.0/4092.0)*0.5**20/self.Tstep - 20e6
             self.log("Setting offset frequency %.0f kHz (%.1f Hz)" % (f, exact), stdout=True)
+            self.rfs.set_channel_mask(0x3fc)
             # phase_step_h goes to PRC, not RFS!
             query = [('dsp_phase_step', n2)]
             prc_op = [['phase_step_h', n1]]
@@ -863,6 +888,7 @@ def get_conf(args, log_root='beg_'):
         mode_center=None,
         zone=1,
         prc_ip=None,
+        loop_is_cav=False,  # allows running on single RFS without fiber links
         dmax_magn=0.8,
         dmax_imag=0.8,
         fwd_fs=10.0,    # kW
