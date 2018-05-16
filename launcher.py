@@ -175,13 +175,13 @@ def main(args):
 
     confdir = os.path.dirname(args.config)
 
+    with open(args.config, 'r') as F:
+        conf = F.read()
+
     # we work from the directory containing the config file so that
     # any relative paths it contains will be relative to the
     # location of the config file
     os.chdir(confdir or '.')
-
-    with open(args.config, 'r') as F:
-        conf = F.read()
 
     conf = re.sub('#[^\n\r]*\r?\n', '', conf) # strip '#' comments
     try:
