@@ -152,9 +152,7 @@ class c_rf_controls:
     def configure_fpga(self):
 
         # Initial setup for waveform acquisition
-        self.rfs.reg_write([
-            ('bank_next', 0),
-        ])
+        # Don't set bank_next here, that only confuses raw.py
         self.rfs.set_decimate(self.wsp)
         self.rfs.set_channel_mask(range(2, 10))
 
