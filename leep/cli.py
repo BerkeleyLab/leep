@@ -4,7 +4,6 @@ from __future__ import print_function
 import logging
 _log = logging.getLogger(__name__)
 
-import sys
 import json
 import sys
 import tempfile

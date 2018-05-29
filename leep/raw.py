@@ -7,8 +7,6 @@ _log = logging.getLogger(__name__)
 _spam = logging.getLogger(__name__+'.packets')
 _spam.propagate = False
 
-import sys
-import os
 import socket
 import random
 import zlib
@@ -51,6 +49,7 @@ def yscale(wave_samp_per=1):
 
 class LEEPDevice(DeviceBase):
     backend = 'leep'
+    rom_addr = 0x800
 
     def __init__(self, addr, timeout=0.1, **kws):
         DeviceBase.__init__(self, **kws)
@@ -74,7 +73,7 @@ class LEEPDevice(DeviceBase):
             L = 2**info.get('addr_width', 0)
 
             base_addr = info['base_addr']
-            if isinstance(base_addr, (bytes, unicode)):
+            if isinstance(base_addr, (bytes, str, unicode)):
                 base_addr = int(base_addr, 0)
 
             if L > 1:
@@ -105,7 +104,7 @@ class LEEPDevice(DeviceBase):
 
             lens.append((info, L))
             base_addr = info['base_addr']
-            if isinstance(base_addr, (bytes, unicode)):
+            if isinstance(base_addr, (bytes, str, unicode)):
                 base_addr = int(base_addr, 0)
             addrs.extend(range(base_addr, base_addr+L))
 
@@ -351,7 +350,7 @@ class LEEPDevice(DeviceBase):
         self.jsonhash = None
         self.regmap = None
 
-        values = self.exchange(range(0x800, 0x1000))
+        values = self.exchange(range(self.rom_addr, self.rom_addr+0x200))
 
         values = numpy.frombuffer(values, be16)
         _log.debug("ROM[0] %08x", values[0])
