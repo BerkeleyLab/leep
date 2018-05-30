@@ -7,6 +7,7 @@ _log = logging.getLogger(__name__)
 _spam = logging.getLogger(__name__+'.packets')
 _spam.propagate = False
 
+import sys
 import socket
 import random
 import zlib
@@ -16,6 +17,9 @@ from datetime import datetime
 from .base import DeviceBase, IGNORE, WARN, ERROR
 
 import numpy
+
+if sys.version_info>=(3,0):
+    unicode = str
 
 be32 = numpy.dtype('>u4')
 be16 = numpy.dtype('>u2')
