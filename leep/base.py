@@ -79,7 +79,8 @@ class DeviceBase(object):
         I = r'_(?:.*_)?'.join([re.escape(str(i)) for i in I])
         R = re.compile('^.*%s$' % I)
 
-        ret = filter(R.match, self.regmap)
+        #ret = filter(R.match, self.regmap)
+        ret = [x for x in self.regmap if R.match(x)]
         if len(ret) == 1:
             return ret[0]
         elif len(ret) > 1:
