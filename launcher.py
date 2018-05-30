@@ -151,6 +151,37 @@ class ProcControl(object):
             _log.debug("%s kill", self.pref)
             self.child.kill()
 
+class KeepAlive(object):
+    def __init__(self, conf):
+        self.conf = conf
+        self.pv = conf.get('pv')
+        if self.pv is None:
+            return
+        self.value = conf.get('value', 1)
+        self.done = cothread.Event()
+        self.task = cothread.Spawn(self._task)
+    def close(self):
+        if self.pv is None:
+            return
+        self.done.Signal()
+        self.task.Wait() # join
+        self.pv = None
+    def _task(self):
+        while True:
+            try:
+                self.done.Wait(self.conf.get('interval', 1.0))
+                return # wakeup from close()
+            except cothread.Timedout:
+                pass
+
+            try:
+                ca.caput(self.pv, self.conf.get('value', 1), timeout=self.conf.get('timeout', 3))
+            except cothread.Timedout:
+                _log.debug("Timeout writing heartbeat "+self.pv)
+            except ca.ca_nothing:
+                _log.debug("Timeout writing heartbeat "+self.pv)
+            except:
+                _log.exception("Error writing heartbeat "+self.pv)
 
 def poke_all():
     _log.debug("SIGCHLD 2")
@@ -159,7 +190,6 @@ def poke_all():
 def handle_child(sig, frame):
     _log.debug("SIGCHLD 1")
     cothread.Callback(poke_all)
-
 
 def getargs():
     from argparse import ArgumentParser
@@ -194,6 +224,8 @@ def main(args):
     for name, sect in conf['procs'].items():
         ProcControl(name, sect['command'], logto=sect.get('logfile'))
 
+    kp = KeepAlive(conf.get('keepalive', {}))
+
     try:
         cothread.WaitForQuit()
     except KeyboardInterrupt:
@@ -201,6 +233,8 @@ def main(args):
 
     for proc in ProcControl.all_procs:
         proc.close()
+
+    kp.close()
 
 if __name__=='__main__':
     main(getargs())
