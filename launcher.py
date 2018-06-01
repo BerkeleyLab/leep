@@ -157,8 +157,9 @@ class KeepAlive(object):
         self.pv = conf.get('pv')
         if self.pv is None:
             return
-        self.value = conf.get('value', 1)
+        self.max = conf.get('max', 2**31 -1) # set default rollover for 32-bit signed integer
         self.done = cothread.Event()
+        self.val = 0
         self.task = cothread.Spawn(self._task)
     def close(self):
         if self.pv is None:
@@ -166,6 +167,13 @@ class KeepAlive(object):
         self.done.Signal()
         self.task.Wait() # join
         self.pv = None
+        self.val = 0
+    def incr(self):
+            if self.val < self.max:
+                self.val += 1
+            else:
+                self.val = 0
+        
     def _task(self):
         while True:
             try:
@@ -175,13 +183,15 @@ class KeepAlive(object):
                 pass
 
             try:
-                ca.caput(self.pv, self.conf.get('value', 1), timeout=self.conf.get('timeout', 3))
+                ca.caput(str(self.pv), self.val, timeout=self.conf.get('timeout', 3))
             except cothread.Timedout:
                 _log.debug("Timeout writing heartbeat "+self.pv)
             except ca.ca_nothing:
                 _log.debug("Timeout writing heartbeat "+self.pv)
             except:
                 _log.exception("Error writing heartbeat "+self.pv)
+
+            self.incr()
 
 def poke_all():
     _log.debug("SIGCHLD 2")
