@@ -38,7 +38,7 @@ class CADevice(DeviceBase):
     def __init__(self, addr, timeout=5.0, **kws):
         DeviceBase.__init__(self, **kws)
         self.timeout = timeout
-        assert self.timeout > 0.1, self.timeout # must be reasonable
+        assert self.timeout > 0.1, self.timeout  # must be reasonable
         self.prefix = str(addr)  # PV prefix
 
         # fetch mapping from register name to info dict
@@ -54,7 +54,7 @@ class CADevice(DeviceBase):
         # {'reg_name:{'base_addr':0, ...}}
         self.regmap = json.loads(zlib.decompress(caget(self.prefix+'CTRL_JSON')))
 
-        extra_reg =set(self._info) - set(self.regmap)
+        extra_reg = set(self._info) - set(self.regmap)
         if extra_reg:
             # inject empty info for fake/missing registers
             self.regmap.update([(K, {}) for K in extra_reg])
@@ -202,13 +202,13 @@ class CADevice(DeviceBase):
         """
         I = self.instance + instance
 
-        names  = [self.pv_name('circle_data', 'input%d' % ch) for ch in chans]
+        names = [self.pv_name('circle_data', 'input%d' % ch) for ch in chans]
         names += [self.pv_name('circle_data', 'scale%d' % ch) for ch in chans]
 
         ret = caget(names, format=FORMAT_TIME)
 
         wfs, scales = ret[:len(chans)], ret[len(chans):]
-        print('scales', scales)
+        # print('scales', scales)
         for wf, scale in zip(wfs, scales):
             # reverse scaling applied in IOC to give [0, 1) scale
             wf /= scale
