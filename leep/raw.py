@@ -154,6 +154,10 @@ class LEEPDevice(DeviceBase):
 
         self.reg_write([('chan_keep', chans)], instance=instance)
 
+    def get_channel_mask(self, instance=[]):
+        chans, =  self.reg_write(['chan_keep'], instance=instance)
+        return chans
+
     def wait_for_acq(self, tag=False, toggle_tag=False, timeout=5.0, instance=[]):
         """Wait for next waveform acquisition to complete.
         If tag=True, then wait for the next acquisition which includes the
