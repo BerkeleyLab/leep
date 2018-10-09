@@ -93,6 +93,9 @@ class CADevice(DeviceBase):
                 name = self.expand_regname(name, instance=instance)
             info = self._info[name]
             pvname = str(info['output'])
+            if info.get('sign', 'unsigned') == 'unsigned' and (value & 0x80000000):
+                # CA only has signed integers
+                value = -((value ^ 0xffffffff)+1)
             caput(pvname, value, wait=True, timeout=self.timeout)
 
     def reg_read(self, names, instance=[]):
