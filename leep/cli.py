@@ -19,7 +19,11 @@ def readwrite(args, dev):
     for pair in args.reg:
         name, _eq, val = pair.partition('=')
         if len(val):
-            dev.reg_write([(name, int(val, 0))])
+            if val[:1]=='[':
+                val = json.loads(val)
+            else:
+                val = int(val, 0)
+            dev.reg_write([(name, val)])
         else:
             value, = dev.reg_read((name,))
             if isinstance(value, (list, numpy.ndarray)):
