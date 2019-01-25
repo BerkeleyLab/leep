@@ -128,6 +128,10 @@ class CADevice(DeviceBase):
     def jsonhash(self):
         return '<not implemented>'
 
+    def get_decimate(self, instance=[]):
+        I = self.instance
+        return self.pv_read('wave_samp_per', 'setting', instance=instance)
+
     def set_decimate(self, dec, instance=[]):
         assert dec >= 1 and dec <= 255
         I = self.instance
@@ -139,6 +143,13 @@ class CADevice(DeviceBase):
         """
         I = self.instance + instance
         # assume that the shell_#_ number is the first
+
+        if type(chans) is int:
+            l = []
+            for i in range(12):
+                if chans&(1<<i):
+                    l.append(11-i)
+            chans = tuple(l)
 
         chans = set(chans)
         disable = set(range(12)) - chans
