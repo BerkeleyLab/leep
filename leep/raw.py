@@ -146,12 +146,16 @@ class LEEPDevice(DeviceBase):
             ('wave_shift', wave_shift),
         ], instance=instance)
 
+    def get_decimate(self, instance=[]):
+        return self.reg_read(['wave_samp_per'],
+                             instance=instance)
+
     def set_channel_mask(self, chans=[], instance=[]):
         """Enabled specified channels.
         """
         # list of channel numbers to mask
-        chans = reduce(lambda l, r: l | r, [2**(11-n) for n in chans], 0)
-
+        if isinstance(chans, list):
+            chans = reduce(lambda l, r: l | r, [2**(11-n) for n in chans], 0)
         self.reg_write([('chan_keep', chans)], instance=instance)
 
     def get_channel_mask(self, instance=[]):
