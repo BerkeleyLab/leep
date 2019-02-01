@@ -130,7 +130,8 @@ class CADevice(DeviceBase):
 
     def get_decimate(self, instance=[]):
         I = self.instance
-        return self.pv_read('wave_samp_per', 'setting', instance=instance)
+        # return list to be compatible with raw.py get_decimate
+        return [self.pv_read('wave_samp_per', 'setting', instance=instance)]
 
     def set_decimate(self, dec, instance=[]):
         assert dec >= 1 and dec <= 255
