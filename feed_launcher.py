@@ -119,7 +119,7 @@ class ProcControl(object):
 
     def handle_start(self):
         if self.current_status != 2:
-            _log.debug("%s starting %s %s", self.pref, self.args, self.launch_args)
+            _log.info("%s starting %s %s", self.pref, self.args, self.launch_args)
 
             args = {'stderr':sp.STDOUT}
             fp = None
