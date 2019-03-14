@@ -242,7 +242,6 @@ class DeviceBase(object):
 
                 elif inst[0] == 'sleep':
                     _inst, delay = inst
-                    delay = delay/4 # tgen fw clock ticks factor of 4 change  
                     delay = int(delay)
 
                     assert delay >= 0, inst
