@@ -124,11 +124,13 @@ class ProcControl(object):
             args = {'stderr':sp.STDOUT}
             fp = None
 
+            sec = time.time()
+
             try:
                 if self.logto:
                     _log.debug("Log to '%s'", self.logto)
                     fp = open(self.logto, 'w')
-                    fp.write('# %s\n# %s\n# --- begin output ---\n'%(self.args, time.ctime()))
+                    fp.write('# %s\n# %s\n# --- begin output ---\n'%(self.args, time.ctime(sec)))
                     args['stdout'] = fp.fileno()
 
                 args.update(self.launch_args)
@@ -140,6 +142,7 @@ class ProcControl(object):
                     fp.close()
 
             ca.caput(b'%sSTS'%self.pref, 2, wait=True)
+            ca.caput(b'%sTS'%self.pref, time.strftime("%Y-%m-%d-%H:%M:%S",time.localtime(sec)), wait=True)
 
     def handle_stop(self):
         if self.current_status == 2:
