@@ -114,6 +114,11 @@ class DeviceBase(object):
         """
         raise NotImplementedError
 
+    def __setitem__(self, key, value):
+        self.reg_write([(key, value)])
+    def __getitem__(self, key):
+        return self.reg_read([key])[0]
+
     def get_reg_info(self, name, instance=[]):
         """Return a dict describing the named register.
         This dictionary is passed through from the information read from the device ROM.
