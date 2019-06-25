@@ -8,6 +8,7 @@ import json
 import sys
 import tempfile
 import shutil
+import ast
 
 from collections import defaultdict
 
@@ -19,7 +20,8 @@ def readwrite(args, dev):
     for pair in args.reg:
         name, _eq, val = pair.partition('=')
         if len(val):
-            dev.reg_write([(name, int(val, 0))])
+            val = ast.literal_eval(val)
+            dev.reg_write([(name, val)])
         else:
             value, = dev.reg_read((name,))
             if isinstance(value, (list, numpy.ndarray)):
@@ -87,7 +89,7 @@ def dumpjson(args, dev):
     sys.stdout.write('\n')
 
 def dumpdrv(args, dev):
-    if dev.backend!='ca':
+    if dev.backend != 'ca':
         _log.error("Only 'ca' backend supports, not '%s'", dev.backend)
         sys.exit(1)
     json.dump(dev._info, sys.stdout, indent=2)
@@ -115,7 +117,7 @@ def gentemplate(args, dev):
         if len(name) == 0:
             _log.warn("Zero length register name")
             continue
-        elif name=='__metadata__':
+        elif name == '__metadata__':
             continue
         components = {
             'access': info.get('access', ''),
