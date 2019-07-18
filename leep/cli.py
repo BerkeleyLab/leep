@@ -102,6 +102,11 @@ class MapDirect(object):
     def __call__(self, name):
         return 'reg_'+name
 
+class MapPlain(object):
+
+    def __call__(self, name):
+        return name
+
 class MapShort(object):
 
     def __init__(self):
@@ -112,7 +117,11 @@ class MapShort(object):
         return 'REG%x' % N
 
 def gentemplate(args, dev):
-    mapper = MapShort() if args.short else MapDirect()
+    mapper = {
+        'short':MapShort,
+        'long':MapDirect,
+        'plain':MapPlain,
+    }[args.mode]()
 
     files = defaultdict(list)
     for name, info in dev.regmap.items():
@@ -141,7 +150,13 @@ def gentemplate(args, dev):
     files.sort(key=lambda i: i[0])
 
     out = tempfile.NamedTemporaryFile('r+')
-    out.write('# Generated from\n# FW: %s\n# JSON: %s\n# Code: %s\n\n' % (dev.descript, dev.jsonhash, dev.codehash))
+    out.write('''# Generated from
+# FW: %s
+# JSON: %s
+# Code: %s
+# Name Mode: -N %s
+
+''' % (dev.descript, dev.jsonhash, dev.codehash, args.mode))
 
     out.write('file "feed_base.template"\n{\n{PREF="$(CHAS):CTRL_"}\n}\n\n')
 
@@ -207,7 +222,8 @@ def getargs():
     S = SP.add_parser('template', help='Generate MSI substitutions file')
     S.set_defaults(func=gentemplate)
     S.add_argument('output', help='Output file')
-    S.add_argument('--short', action='store_true', help='Generate shorter, but less meaningful PV names')
+    S.add_argument('-M', '--mode', default='long', help='Record naming mode: long (default), short, plain')
+    S.add_argument('--short', action='store_const', const='short', dest='mode', help='Alias for -M short')
 
     return P.parse_args()
 
