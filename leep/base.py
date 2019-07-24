@@ -242,7 +242,10 @@ class DeviceBase(object):
 
                 elif inst[0] == 'sleep':
                     _inst, delay = inst
-                    delay = delay/4 # tgen fw clock ticks factor of 4 change  
+                    exp = self.regmap["__metadata__"]["tgen_granularity_log2"]
+                    if exp < 0:
+                        raise RuntimeError('tgen delay scale exponent out of bounds (%s < 0)' % (exp))
+                    delay = delay/(pow(2,exp))
                     delay = int(delay)
 
                     assert delay >= 0, inst
