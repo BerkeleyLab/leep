@@ -46,8 +46,12 @@ def open(addr, **kws):
         from .raw import LEEPDevice
         return LEEPDevice(addr[7:], **kws)
 
+    elif addr.startswith('file://'):
+        from .file import FileDevice
+        return FileDevice(addr[7:], **kws)
+
     else:
-        raise ValueError("Unknown '%s' must begin with ca:// or leep://" % addr)
+        raise ValueError("Unknown '%s' must begin with ca://, leep://, or file://" % addr)
 
 class DeviceBase(object):
     backend = None  # 'ca' or 'leep'

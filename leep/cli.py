@@ -156,7 +156,7 @@ def gentemplate(args, dev):
 # FW: %s
 # JSON: %s
 # Code: %s
-# Name Mode: -N %s
+# Name Mode: -M %s
 
 ''' % (dev.descript, dev.jsonhash, dev.codehash, args.mode))
 
