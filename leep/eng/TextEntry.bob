@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <display version="2.0.0">
-  <width>910</width>
+  <name>LO</name>
+  <width>930</width>
   <height>25</height>
   <background_color>
     <color red="240" green="240" blue="240">
@@ -11,7 +12,7 @@
   <widget type="textupdate" version="2.0.0">
     <name>Readback</name>
     <pv_name>Readback</pv_name>
-    <x>240</x>
+    <x>200</x>
     <height>25</height>
     <background_color>
       <color red="255" green="255" blue="255">
@@ -30,7 +31,7 @@
   <widget type="label" version="2.0.0">
     <name>Label</name>
     <text>Label</text>
-    <width>241</width>
+    <width>200</width>
     <height>25</height>
     <vertical_alignment>1</vertical_alignment>
     <wrap_words>false</wrap_words>
@@ -50,9 +51,9 @@
       </action>
     </actions>
     <pv_name>Readback</pv_name>
-    <text>&lt;- Read</text>
-    <x>339</x>
-    <width>82</width>
+    <text>&lt;-</text>
+    <x>400</x>
+    <width>40</width>
     <height>25</height>
     <background_color>
       <color red="240" green="240" blue="240">
@@ -63,7 +64,8 @@
   <widget type="textentry" version="3.0.0">
     <name>Setting</name>
     <pv_name>Setting</pv_name>
-    <x>420</x>
+    <x>440</x>
+    <width>80</width>
     <height>25</height>
     <background_color>
       <color red="255" green="255" blue="255">
@@ -79,9 +81,48 @@
   </widget>
   <widget type="scrollbar" version="2.0.0">
     <name>Slider</name>
-    <pv_name>Slider</pv_name>
-    <x>520</x>
+    <pv_name>Setting</pv_name>
+    <x>600</x>
     <width>330</width>
     <height>25</height>
+  </widget>
+  <widget type="textupdate" version="2.0.0">
+    <name>Readback_1</name>
+    <pv_name>Readback</pv_name>
+    <x>300</x>
+    <height>25</height>
+    <background_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </background_color>
+    <format>4</format>
+    <horizontal_alignment>2</horizontal_alignment>
+    <vertical_alignment>1</vertical_alignment>
+    <wrap_words>false</wrap_words>
+    <actions>
+    </actions>
+    <border_color>
+      <color red="0" green="128" blue="255">
+      </color>
+    </border_color>
+  </widget>
+  <widget type="textentry" version="3.0.0">
+    <name>Setting_1</name>
+    <pv_name>Setting</pv_name>
+    <x>520</x>
+    <width>80</width>
+    <height>25</height>
+    <background_color>
+      <color red="255" green="255" blue="255">
+      </color>
+    </background_color>
+    <format>4</format>
+    <show_units>false</show_units>
+    <actions>
+    </actions>
+    <border_color>
+      <color red="0" green="128" blue="255">
+      </color>
+    </border_color>
   </widget>
 </display>

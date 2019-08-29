@@ -54,10 +54,13 @@ def main(args):
                 if txt is not None:
                     txt.text = name
 
-            if W.find('name').text in ['Readback', 'Scan']:
-                W.find('pv_name').text = read_pv_name
-            elif W.find('name').text in ['Setting', 'Slider']:
-                W.find('pv_name').text = set_pv_name
+            pv_name = W.find('pv_name')
+            if pv_name is None:
+                pass
+            elif pv_name.text=='Readback':
+                pv_name.text = read_pv_name
+            elif pv_name.text=='Setting':
+                pv_name.text = set_pv_name
 
             T.append(W)
 
