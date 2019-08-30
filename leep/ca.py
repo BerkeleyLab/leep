@@ -93,9 +93,11 @@ class CADevice(DeviceBase):
                 name = self.expand_regname(name, instance=instance)
             info = self._info[name]
             pvname = str(info['output'])
-            # if info.get('sign', 'unsigned') == 'unsigned' and (value & 0x80000000):
             # CA only has signed integers
-            # value = -((value ^ 0xffffffff)+1)
+            if isinstance(value, numpy.ndarray):
+                value = numpy.asarray(value, dtype='i')
+            elif info.get('sign', 'unsigned') == 'unsigned' and (value & 0x80000000):
+                value = -((value ^ 0xffffffff)+1)
             caput(pvname, value, wait=True, timeout=self.timeout)
 
     def reg_read(self, names, instance=[]):
@@ -111,7 +113,9 @@ class CADevice(DeviceBase):
             ret[i] = caget(pvname, timeout=self.timeout)
             # cope with lack of unsigned in CA
             info = self.regmap[name]
-            if info.get('sign', 'unsigned') == 'unsigned':
+            if isinstance(ret[i], numpy.ndarray):
+                ret[i] = numpy.asarray(ret[i], dtype='I')
+            elif info.get('sign', 'unsigned') == 'unsigned':
                 ret[i] &= (2**info['data_width'])-1
 
         return ret
