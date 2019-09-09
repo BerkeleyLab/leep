@@ -96,8 +96,12 @@ class CADevice(DeviceBase):
             # CA only has signed integers
             if isinstance(value, numpy.ndarray):
                 value = numpy.asarray(value, dtype='i')
-            elif info.get('sign', 'unsigned') == 'unsigned' and (value & 0x80000000):
-                value = -((value ^ 0xffffffff)+1)
+            elif isinstance(value, list):
+		for i in range(len(value)):
+                    if info.get('sign', 'unsigned') == 'unsigned' and (int(value[i]) & 0x80000000):
+			value[i] = -((int(value[i]) ^ 0xffffffff)+1)
+            elif info.get('sign', 'unsigned') == 'unsigned' and (int(value) & 0x80000000):
+                value = -((int(value) ^ 0xffffffff)+1)
             caput(pvname, value, wait=True, timeout=self.timeout)
 
     def reg_read(self, names, instance=[]):
