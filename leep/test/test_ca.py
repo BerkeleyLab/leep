@@ -88,8 +88,8 @@ class TestCA(unittest.TestCase):
     def setUp(self):
         _PVs.clear()
 
-        _PVs['TST:CTRL_JINFO'] = zlib.compress(json.dumps(self.jinfo), 9)
-        _PVs['TST:CTRL_JSON'] = zlib.compress(json.dumps(self.regmap), 9)
+        _PVs['TST:CTRL_JINFO'] = zlib.compress(json.dumps(self.jinfo).encode('utf-8'), 9)
+        _PVs['TST:CTRL_JSON'] = zlib.compress(json.dumps(self.regmap).encode('utf-8'), 9)
         _PVs['TST:reg_sval_RBV.PROC'] = 0
         _PVs['TST:reg_uval_RBV.PROC'] = 0
         _PVs['TST:reg_sarr_RBV.PROC'] = 0

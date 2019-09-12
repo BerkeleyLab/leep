@@ -52,7 +52,7 @@ class SimServer(object):
         self.url = 'leep://%s:%d'%self.S.getsockname()
         _log.info('SimServer %s starting', self.url)
 
-        blob = zlib.compress(json.dumps(self.regmap), 9)
+        blob = zlib.compress(json.dumps(self.regmap).encode('utf-8'), 9)
         if len(blob)&1:
             blob = blob + b'\0'
         RM = np.frombuffer(blob, '>H')
