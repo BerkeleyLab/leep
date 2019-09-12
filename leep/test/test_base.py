@@ -7,6 +7,9 @@ class TestingDevice(DeviceBase):
     def __init__(self, *args, **kws):
         DeviceBase.__init__(self, *args, **kws)
         self.regmap = {
+            '__metadata__':{
+                'tgen_granularity_log2':0,
+            },
             'XXX': {
                 'base_addr':0x10100,
                 'addr_width':4*4, # 4 instructions
