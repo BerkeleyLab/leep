@@ -75,15 +75,20 @@ class DeviceBase(object):
         'tget_0_delay_pc_XXX'
         """
 
-        if name in self.regmap:
+        # check for full register name,
+        # or shortcut to disable mapping
+        if name in self.regmap or instance is None:
             return name
 
         # build a regexp
+        # from a list of name fragments
         I = self.instance + instance + [name]
+        # match when consecutive fragments are seperated by
+        #  1. a single '_'.  ['A', 'B'] matches 'A_B'.
+        #  2. two '_' with anything inbetween.  'A_blah_B' or 'A_x_y_z_B'.
         I = r'_(?:.*_)?'.join([re.escape(str(i)) for i in I])
         R = re.compile('^.*%s$' % I)
 
-        #ret = filter(R.match, self.regmap)
         ret = [x for x in self.regmap if R.match(x)]
         if len(ret) == 1:
             return ret[0]
