@@ -1,5 +1,6 @@
 
 from __future__ import print_function
+from functools import reduce
 
 import logging
 _log = logging.getLogger(__name__)
