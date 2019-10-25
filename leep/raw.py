@@ -78,17 +78,20 @@ class LEEPDevice(DeviceBase):
             L = 2**info.get('addr_width', 0)
 
             base_addr = info['base_addr']
-            if isinstance(base_addr, (bytes, str, unicode)):
+            if isinstance(base_addr, (bytes, unicode)):
                 base_addr = int(base_addr, 0)
+
+            value = numpy.asarray(value, dtype='I')
 
             if L > 1:
                 _log.debug('reg_write %s <- %s ...', name, value[:10])
-                assert len(value) == L, ('must write whole register', len(value), L)
+                assert value.ndim==1 and value.shape[0] == L, ('must write whole register', value.shape, L)
                 # array register
                 for A, V in enumerate(value, base_addr):
                     addrs.append(A)
                     values.append(V)
             else:
+                assert value.ndim==0, 'scalar register'
                 _log.debug('reg_write %s <- %s', name, value)
                 addrs.append(base_addr)
                 values.append(value)

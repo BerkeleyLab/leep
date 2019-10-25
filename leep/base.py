@@ -46,8 +46,12 @@ def open(addr, **kws):
         from .raw import LEEPDevice
         return LEEPDevice(addr[7:], **kws)
 
+    elif addr.startswith('file://'):
+        from .file import FileDevice
+        return FileDevice(addr[7:], **kws)
+
     else:
-        raise ValueError("Unknown '%s' must begin with ca:// or leep://" % addr)
+        raise ValueError("Unknown '%s' must begin with ca://, leep://, or file://" % addr)
 
 class DeviceBase(object):
     backend = None  # 'ca' or 'leep'
@@ -71,15 +75,20 @@ class DeviceBase(object):
         'tget_0_delay_pc_XXX'
         """
 
-        if name in self.regmap:
+        # check for full register name,
+        # or shortcut to disable mapping
+        if name in self.regmap or instance is None:
             return name
 
         # build a regexp
+        # from a list of name fragments
         I = self.instance + instance + [name]
+        # match when consecutive fragments are seperated by
+        #  1. a single '_'.  ['A', 'B'] matches 'A_B'.
+        #  2. two '_' with anything inbetween.  'A_blah_B' or 'A_x_y_z_B'.
         I = r'_(?:.*_)?'.join([re.escape(str(i)) for i in I])
         R = re.compile('^.*%s$' % I)
 
-        #ret = filter(R.match, self.regmap)
         ret = [x for x in self.regmap if R.match(x)]
         if len(ret) == 1:
             return ret[0]
@@ -113,6 +122,11 @@ class DeviceBase(object):
         >>> A, B = D.reg_read(['reg_a', 'reg_b'])
         """
         raise NotImplementedError
+
+    def __setitem__(self, key, value):
+        self.reg_write([(key, value)])
+    def __getitem__(self, key):
+        return self.reg_read([key])[0]
 
     def get_reg_info(self, name, instance=[]):
         """Return a dict describing the named register.

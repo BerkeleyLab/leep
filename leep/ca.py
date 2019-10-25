@@ -70,8 +70,7 @@ class CADevice(DeviceBase):
             self._S = None
 
     def pv_name(self, name, tag, instance=[]):
-        if instance is not None:
-            name = self.expand_regname(name, instance=instance)
+        name = self.expand_regname(name, instance=instance)
         info = self._info[name]
         return str(info[tag])
 
@@ -89,30 +88,29 @@ class CADevice(DeviceBase):
 
     def reg_write(self, ops, instance=[]):
         for name, value in ops:
-            if instance is not None:
-                name = self.expand_regname(name, instance=instance)
+            name = self.expand_regname(name, instance=instance)
             info = self._info[name]
             pvname = str(info['output'])
-            # if info.get('sign', 'unsigned') == 'unsigned' and (value & 0x80000000):
+
             # CA only has signed integers
-            # value = -((value ^ 0xffffffff)+1)
+            value = numpy.asarray(value, dtype='i')
+
             caput(pvname, value, wait=True, timeout=self.timeout)
 
     def reg_read(self, names, instance=[]):
         ret = [None]*len(names)
         for i, name in enumerate(names):
-            if instance is not None:
-                name = self.expand_regname(name, instance=instance)
+            name = self.expand_regname(name, instance=instance)
             info = self._info[name]
             pvname = str(info['input'])
 
             caput(pvname+'.PROC', 1, wait=True, timeout=self.timeout)
             # force as unsigned
-            ret[i] = caget(pvname, timeout=self.timeout)
+            ret[i] = numpy.asanyarray(caget(pvname, timeout=self.timeout), dtype='i')
             # cope with lack of unsigned in CA
             info = self.regmap[name]
             if info.get('sign', 'unsigned') == 'unsigned':
-                ret[i] &= (2**info['data_width'])-1
+                ret[i] = ret[i].view(dtype='I')
 
         return ret
 
@@ -214,10 +212,8 @@ class CADevice(DeviceBase):
         """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
         chans may be a bit mask or a list of channel numbers
         """
-        I = self.instance + instance
-
-        names = [self.pv_name('circle_data', 'input%d' % ch) for ch in chans]
-        names += [self.pv_name('circle_data', 'scale%d' % ch) for ch in chans]
+        names = [self.pv_name('circle_data', 'input%d' % ch, instance=instance) for ch in chans]
+        names += [self.pv_name('circle_data', 'scale%d' % ch, instance=instance) for ch in chans]
 
         ret = caget(names, format=FORMAT_TIME)
 
@@ -234,8 +230,7 @@ class CADevice(DeviceBase):
         return wfs
 
     def get_timebase(self, chans=[], instance=[]):
-        I = self.instance + instance
-        ret = caget([self.pv_name('circle_data', 'time%d' % ch) for ch in chans], format=FORMAT_TIME)
+        ret = caget([self.pv_name('circle_data', 'time%d' % ch, instance=instance) for ch in chans], format=FORMAT_TIME)
         if len(ret) >= 2 and not all([ret[0].raw_stamp == R.raw_stamp for R in ret[1:]]):
             raise RuntimeError("Inconsistent timestamps! %s" % [R.raw_stamp for R in ret])
         return ret
