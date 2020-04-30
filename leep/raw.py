@@ -268,7 +268,7 @@ class LEEPDevice(DeviceBase):
             'wave_samp_per',
         ], instance=instance)
 
-        period = 2*33*dec/94.29e6
+        period = 2*33*dec*14/1320e6
 
         # count number of bits set
         nbits, M = 0, keep
