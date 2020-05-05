@@ -25,7 +25,28 @@ if sys.version_info >= (3, 0):
 be32 = numpy.dtype('>u4')
 be16 = numpy.dtype('>u2')
 
-def yscale(wave_samp_per=1):
+
+def yscale_resctrl(wave_samp_per=1):
+    try:
+        from math import ceil, log
+
+        cic_period = 1
+        cic_order = 2
+        per = cic_period * wave_samp_per
+
+        bit_g = per**cic_order  # Bit growth
+        wave_shift = ceil(log(bit_g, 2)/cic_order)  # FW accounts for cic_order when shifting
+
+        cic_gain = bit_g / 2**(2*wave_shift)
+
+        adc_fs = 2.0**17 * cic_gain
+
+        return wave_shift, adc_fs
+    except Exception as e:
+        raise RuntimeError("yscale_rfs(%s) %s" % (wave_samp_per, e))
+
+
+def yscale_rfs(wave_samp_per=1):
     # Note that changes to the output of this function
     # need to be reflected in testsub.cpp
     try:
@@ -50,7 +71,7 @@ def yscale(wave_samp_per=1):
 
         return wave_shift, adc_fs
     except Exception as e:
-        raise RuntimeError("yscale(%s) %s" % (wave_samp_per, e))
+        raise RuntimeError("yscale_rfs(%s) %s" % (wave_samp_per, e))
 
 class LEEPDevice(DeviceBase):
     backend = 'leep'
@@ -65,6 +86,14 @@ class LEEPDevice(DeviceBase):
         self.sock.settimeout(timeout)
 
         self._readrom()
+
+        app_string = self.regmap["__metadata__"]["application"]
+        self.rfs = False
+        self.resctrl = False
+        if 'RES_CTRL' in app_string:
+            self.resctrl = True
+        else:
+            self.rfs = True
 
     def reg_write(self, ops, instance=[]):
 
@@ -143,7 +172,11 @@ class LEEPDevice(DeviceBase):
         return ret
 
     def set_decimate(self, dec, instance=[]):
-        wave_shift, _Ymax = yscale(dec)
+        if self.rfs:
+            wave_shift, _Ymax = yscale_rfs(dec)
+        elif self.resctrl:
+            wave_shift, _Ymax = yscale_resctrl(dec)
+
         assert dec >= 1 and dec <= 255
         self.reg_write([
             ('wave_samp_per', dec),
@@ -173,11 +206,12 @@ class LEEPDevice(DeviceBase):
         """
         start = datetime.utcnow()
 
-        T, = self.reg_read(['dsp_tag'], instance=instance)
-        if tag or toggle_tag:
-            T = (T+1) & 0xff
-            self.reg_write([('dsp_tag', T)], instance=instance)
-            _log.debug('Set Tag %d', T)
+        if self.rfs:
+            T, = self.reg_read(['dsp_tag'], instance=instance)
+            if tag or toggle_tag:
+                T = (T+1) & 0xff
+                self.reg_write([('dsp_tag', T)], instance=instance)
+                _log.debug('Set Tag %d', T)
 
         I = self.instance + instance
         # assume that the shell_#_ number is the first
@@ -194,25 +228,29 @@ class LEEPDevice(DeviceBase):
                     raise RuntimeError('Timeout')
 
                 # TODO: use exchange() and optimize to fetch slow_data[33] as well
-                ready, = self.reg_read(['llrf_circle_ready'], instance=None)
+                ready_register = 'llrf_circle_ready' if self.rfs else 'circle_data_ready'
+                ready, = self.reg_read([ready_register], instance=None)
 
                 if ready & mask:
                     break
 
-            slow, = self.reg_read(['slow_data'], instance=instance)
-            tag_old = slow[34]
-            tag_new = slow[33]
-            dT = (tag_old - T) & 0xff
-            tag_match = dT == 0 and tag_new == tag_old
+            if self.rfs:
+                slow, = self.reg_read(['slow_data'], instance=instance)
+                tag_old = slow[34]
+                tag_new = slow[33]
+                dT = (tag_old - T) & 0xff
+                tag_match = dT == 0 and tag_new == tag_old
 
-            if not tag:
-                break
+                if not tag:
+                    break
 
-            if tag_match:
-                break  # all done, waveform reflects latest parameter changes
+                if tag_match:
+                    break  # all done, waveform reflects latest parameter changes
 
-            if dT != 0xff:
-                raise RuntimeError('acquisition collides with another client: %d %d %d' % (tag_old, tag_new, T))
+                if dT != 0xff:
+                    raise RuntimeError('acquisition collides with another client: %d %d %d' % (tag_old, tag_new, T))
+            else:
+                return now
 
             _log.debug('Acquire retry')
 
@@ -225,13 +263,15 @@ class LEEPDevice(DeviceBase):
         """
         interested = reduce(lambda l, r: l | r, [2**(11-n) for n in chans], 0)
 
-        keep, data, dec = self.reg_read([
-            'chan_keep',
-            'circle_data',
-            'wave_samp_per',
-        ], instance=instance)
+        if self.rfs:
+            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per',], instance=instance)
+            data, = self.reg_read(['circle_data'], instance=instance)
+            wave_shift, Ymax = yscale_rfs(dec)
+        else:
+            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per',], instance=None)
+            data, = self.reg_read(['circle_data_%s' % (instance[0])], instance=None)
+            wave_shift, Ymax = yscale_resctrl(dec)
 
-        wave_shift, Ymax = yscale(dec)
         # assume wave_shift has been set properly
         assert Ymax != 0, dec
 
@@ -246,6 +286,10 @@ class LEEPDevice(DeviceBase):
                 nbits += 1
             M >>= 1
 
+        # Lop off extra samples to get same number of samples per channel
+        L = len(data)
+        xtra = L % nbits
+        data = numpy.delete(data, range(L-xtra, L))
         cdata, M = {}, 0
         for ch in range(12):
             cmask = 2**(11-ch)
@@ -260,15 +304,22 @@ class LEEPDevice(DeviceBase):
         return list([cdata[ch] for ch in chans])
 
     def get_timebase(self, chans=[], instance=[]):
-        info = self.get_reg_info('circle_data', instance=instance)
+        if self.rfs:
+            info = self.get_reg_info('circle_data', instance=instance)
+            keep, dec = self.reg_read([
+                'chan_keep',
+                'wave_samp_per',
+            ], instance=instance)
+            period = 2*33*dec*14/1320e6
+        else:
+            info = self.get_reg_info('circle_%s_data' % instance[0], instance=None)
+            keep, dec = self.reg_read([
+                'chan_keep',
+                'wave_samp_per',
+            ], instance=None)
+            period = dec/8e3
+
         totalsamp = 2**info['addr_width']
-
-        keep, dec = self.reg_read([
-            'chan_keep',
-            'wave_samp_per',
-        ], instance=instance)
-
-        period = 2*33*dec*14/1320e6
 
         # count number of bits set
         nbits, M = 0, keep
