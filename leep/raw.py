@@ -26,6 +26,12 @@ be32 = numpy.dtype('>u4')
 be16 = numpy.dtype('>u2')
 
 
+def yscale_inj(wave_samp_per=1):
+    wave_shift = 0
+    adc_fs = 0.5*2.0**17
+    return wave_shift, adc_fs
+
+
 def yscale_resctrl(wave_samp_per=1):
     try:
         from math import ceil, log
@@ -73,6 +79,7 @@ def yscale_rfs(wave_samp_per=1):
     except Exception as e:
         raise RuntimeError("yscale_rfs(%s) %s" % (wave_samp_per, e))
 
+
 class LEEPDevice(DeviceBase):
     backend = 'leep'
     rom_addr = 0x800
@@ -90,8 +97,11 @@ class LEEPDevice(DeviceBase):
         app_string = self.regmap["__metadata__"]["application"]
         self.rfs = False
         self.resctrl = False
+        self.injector = False
         if 'RES_CTRL' in app_string:
             self.resctrl = True
+        elif 'INJECTOR' in app_string:
+            self.injector = True
         else:
             self.rfs = True
 
@@ -176,6 +186,8 @@ class LEEPDevice(DeviceBase):
             wave_shift, _Ymax = yscale_rfs(dec)
         elif self.resctrl:
             wave_shift, _Ymax = yscale_resctrl(dec)
+        elif self.injector:
+            wave_shift, _Ymax = yscale_inj(dec)
 
         assert dec >= 1 and dec <= 255
         self.reg_write([
@@ -215,10 +227,15 @@ class LEEPDevice(DeviceBase):
 
         I = self.instance + instance
         # assume that the shell_#_ number is the first
-        mask = 2**int(I[0])
+        mask = 1
+        if I:
+            mask = 2**int(I[0])
 
         while True:
-            self.reg_write([('circle_buf_flip', mask)], instance=None)
+            if self.injector:
+               self.reg_write([('circle_buf_flip', mask)], instance=[])
+            else:
+               self.reg_write([('circle_buf_flip', mask)], instance=None)
 
             while True:
                 now = datetime.utcnow()
@@ -228,7 +245,7 @@ class LEEPDevice(DeviceBase):
                     raise RuntimeError('Timeout')
 
                 # TODO: use exchange() and optimize to fetch slow_data[33] as well
-                ready_register = 'llrf_circle_ready' if self.rfs else 'circle_data_ready'
+                ready_register = 'llrf_circle_ready' if self.rfs or self.injector else 'circle_data_ready'
                 ready, = self.reg_read([ready_register], instance=None)
 
                 if ready & mask:
@@ -264,13 +281,18 @@ class LEEPDevice(DeviceBase):
         interested = reduce(lambda l, r: l | r, [2**(11-n) for n in chans], 0)
 
         if self.rfs:
-            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per',], instance=instance)
+            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per'], instance=instance)
             data, = self.reg_read(['circle_data'], instance=instance)
             wave_shift, Ymax = yscale_rfs(dec)
         else:
-            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per',], instance=None)
-            data, = self.reg_read(['circle_data_%s' % (instance[0])], instance=None)
-            wave_shift, Ymax = yscale_resctrl(dec)
+            if self.resctrl:
+                keep, dec = self.reg_read(['chan_keep', 'wave_samp_per'], instance=None)
+                data, = self.reg_read(['circle_data_%s' % (instance[0])], instance=None)
+                wave_shift, Ymax = yscale_resctrl(dec)
+            elif self.injector:
+                keep, dec = self.reg_read(['chan_keep', 'wave_samp_per'], instance=[])
+                data, = self.reg_read(['circle_data'], instance=[])
+                wave_shift, Ymax = yscale_inj(dec)
 
         # assume wave_shift has been set properly
         assert Ymax != 0, dec
@@ -317,7 +339,10 @@ class LEEPDevice(DeviceBase):
                 'chan_keep',
                 'wave_samp_per',
             ], instance=None)
-            period = dec/8e3
+            if self.resctrl:
+                period = dec/8e3
+            elif self.injector:
+                period = 33*dec*14/1320e6
 
         totalsamp = 2**info['addr_width']
 
