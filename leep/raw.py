@@ -202,9 +202,11 @@ class LEEPDevice(DeviceBase):
     def set_channel_mask(self, chans=[], instance=[]):
         """Enabled specified channels.
         """
+        info = self.get_reg_info('chan_keep', instance=instance)
+        nch = info['data_width']
         # list of channel numbers to mask
         if isinstance(chans, list):
-            chans = reduce(lambda l, r: l | r, [2**(11-n) for n in chans], 0)
+            chans = reduce(lambda l, r: l | r, [2**(nch-1-n) for n in chans], 0)
         self.reg_write([('chan_keep', chans)], instance=instance)
 
     def get_channel_mask(self, instance=[]):
@@ -278,7 +280,9 @@ class LEEPDevice(DeviceBase):
         """:returns: a list of :py:class:`numpy.ndarray` with the numbered channels.
         chans may be a bit mask or a list of channel numbers
         """
-        interested = reduce(lambda l, r: l | r, [2**(11-n) for n in chans], 0)
+        info = self.get_reg_info('chan_keep', instance=instance)
+        nch = info['data_width']
+        interested = reduce(lambda l, r: l | r, [2**(nch-1-n) for n in chans], 0)
 
         if self.rfs:
             keep, dec = self.reg_read(['chan_keep', 'wave_samp_per'], instance=instance)
@@ -313,8 +317,8 @@ class LEEPDevice(DeviceBase):
         xtra = L % nbits
         data = numpy.delete(data, range(L-xtra, L))
         cdata, M = {}, 0
-        for ch in range(12):
-            cmask = 2**(11-ch)
+        for ch in range(nch):
+            cmask = 2**(nch-1-ch)
             if not (keep & cmask):
                 continue
             if interested & cmask:
