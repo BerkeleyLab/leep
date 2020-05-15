@@ -27,9 +27,32 @@ be16 = numpy.dtype('>u2')
 
 
 def yscale_inj(wave_samp_per=1):
-    wave_shift = 0
-    adc_fs = 0.5*2.0**17
-    return wave_shift, adc_fs
+    try:
+        from math import ceil, log
+
+        cic_period = 22
+        cic_order = 2
+
+        # FW default shift assuming wsp = 1
+        shift_base = ceil(log(cic_period ** cic_order, 2))
+
+        # FW LO pre-scaling to cancel out non-unit CIC gain
+        pre_gain = 2**shift_base/cic_period**cic_order
+        pre_gain *= 1/2
+
+        per = cic_period * wave_samp_per
+        bit_g = per**cic_order  # Bit growth
+        bit_g_shift = ceil(log(bit_g, 2))
+        wave_shift = bit_g_shift - shift_base
+        wave_shift *= 1 / cic_order  # FW accounts for cic_order when shifting
+
+        cic_gain = bit_g / 2**(cic_order*wave_shift + shift_base)
+
+        adc_fs = 2.0**15 * cic_gain * pre_gain
+
+        return wave_shift, adc_fs
+    except Exception as e:
+        raise RuntimeError("yscale_rfs(%s) %s" % (wave_samp_per, e))
 
 
 def yscale_resctrl(wave_samp_per=1):
@@ -43,7 +66,7 @@ def yscale_resctrl(wave_samp_per=1):
         bit_g = per**cic_order  # Bit growth
         wave_shift = ceil(log(bit_g, 2)/cic_order)  # FW accounts for cic_order when shifting
 
-        cic_gain = bit_g / 2**(2*wave_shift)
+        cic_gain = bit_g / 2**(cic_order*wave_shift)
 
         adc_fs = 2.0**17 * cic_gain
 
