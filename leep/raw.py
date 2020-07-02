@@ -48,7 +48,7 @@ def yscale_inj(wave_samp_per=1):
 
         cic_gain = bit_g / 2**(cic_order*wave_shift + shift_base)
 
-        adc_fs = 2.0**15 * cic_gain * pre_gain
+        adc_fs = 2.0**19 * cic_gain * pre_gain
 
         return wave_shift, adc_fs
     except Exception as e:
