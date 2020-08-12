@@ -218,6 +218,8 @@ class LEEPDevice(DeviceBase):
         mask = 2**int(I[0])
 
         while True:
+            if self.resctrl:
+                mask = 0xF  # Always re-arm 4 channels
             self.reg_write([('circle_buf_flip', mask)], instance=None)
 
             while True:
