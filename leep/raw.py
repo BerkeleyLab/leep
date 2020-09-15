@@ -369,7 +369,7 @@ class LEEPDevice(DeviceBase):
             if self.resctrl:
                 period = dec/8e3
             elif self.injector:
-                period = 33*dec*14/1320e6
+                period = 22*dec*140/(11*1300e6)
 
         totalsamp = 2**info['addr_width']
 
