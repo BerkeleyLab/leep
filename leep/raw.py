@@ -1,5 +1,13 @@
 
 from __future__ import print_function
+import numpy
+from datetime import datetime
+import json
+import zlib
+import random
+import socket
+import sys
+import os
 from functools import reduce
 
 import logging
@@ -8,16 +16,8 @@ _log = logging.getLogger(__name__)
 _spam = logging.getLogger(__name__+'.packets')
 _spam.propagate = False
 
-import sys
-import socket
-import random
-import zlib
-import json
-from datetime import datetime
-
-from .base import DeviceBase, IGNORE, WARN, ERROR
-
-import numpy
+sys.path.append(os.path.join(os.path.dirname(__file__), "."))
+from base import DeviceBase
 
 if sys.version_info >= (3, 0):
     unicode = str
@@ -73,9 +73,19 @@ def yscale_rfs(wave_samp_per=1):
     except Exception as e:
         raise RuntimeError("yscale_rfs(%s) %s" % (wave_samp_per, e))
 
+
 class LEEPDevice(DeviceBase):
     backend = 'leep'
-    rom_addr = 0x800
+    init_rom_addr = 0x800
+    max_rom_addr = 0x4000
+    # preamble is bound in build_rom.py by limiting description to 40 words (80 bytes)
+    # each hash is 10 words. 40 + 10 + 10 = 60. Plus 4 for each of the types.
+    preamble_max_size = 64
+    # Hash = 10 + 10 and descriptor for each type (hash and description) is one.
+    hash_descriptor_size = 24
+    size_desc = 0
+    size_rom = 0
+    the_rom = []
 
     def __init__(self, addr, timeout=0.1, **kws):
         DeviceBase.__init__(self, **kws)
@@ -114,13 +124,13 @@ class LEEPDevice(DeviceBase):
 
             if L > 1:
                 _log.debug('reg_write %s <- %s ...', name, value[:10])
-                assert value.ndim==1 and value.shape[0] == L, ('must write whole register', value.shape, L)
+                assert value.ndim == 1 and value.shape[0] == L, ('must write whole register', value.shape, L)
                 # array register
                 for A, V in enumerate(value, base_addr):
                     addrs.append(A)
                     values.append(V)
             else:
-                assert value.ndim==0, 'scalar register'
+                assert value.ndim == 0, 'scalar register'
                 _log.debug('reg_write %s <- %s', name, value)
                 addrs.append(base_addr)
                 values.append(value)
@@ -213,9 +223,9 @@ class LEEPDevice(DeviceBase):
                 self.reg_write([('dsp_tag', T)], instance=instance)
                 _log.debug('Set Tag %d', T)
 
-        I = self.instance + instance
+        inst = self.instance + instance
         # assume that the shell_#_ number is the first
-        mask = 2**int(I[0])
+        mask = 2**int(inst[0])
 
         while True:
             if self.resctrl:
@@ -266,11 +276,11 @@ class LEEPDevice(DeviceBase):
         interested = reduce(lambda l, r: l | r, [2**(11-n) for n in chans], 0)
 
         if self.rfs:
-            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per',], instance=instance)
+            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per', ], instance=instance)
             data, = self.reg_read(['circle_data'], instance=instance)
             wave_shift, Ymax = yscale_rfs(dec)
         else:
-            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per',], instance=None)
+            keep, dec = self.reg_read(['chan_keep', 'wave_samp_per', ], instance=None)
             data, = self.reg_read(['circle_data_%s' % (instance[0])], instance=None)
             wave_shift, Ymax = yscale_resctrl(dec)
 
@@ -413,36 +423,49 @@ class LEEPDevice(DeviceBase):
 
         return ret
 
-    def _readrom(self):
-        self.descript = None
-        self.codehash = None
-        self.jsonhash = None
-        self.regmap = None
+    def _trysize(self, start_addr):
+        end_addr = start_addr+self.preamble_max_size
+        values = self.exchange(range(start_addr, end_addr))
+        values_preamble = numpy.array(values)
+        self._checkrom(values, True)
 
-        values = self.exchange(range(self.rom_addr, self.rom_addr+0x800))
+        if self.size_rom != 0:
+            total_rom_size = self.hash_descriptor_size+self.size_desc+self.size_rom
+            stop_addr = end_addr+total_rom_size-self.preamble_max_size
+            values_json = self.exchange(range(end_addr, stop_addr))
+            values_full = numpy.array(numpy.concatenate((values_preamble, values_json)), be32)
+            self._checkrom(values_full)
+            return values_full
+        else:
+            raise RuntimeError("ROM not found")
 
+    def _checkrom(self, values, preamble_check=False):
         values = numpy.frombuffer(values, be16)
-        _log.debug("ROM[0] %08x", values[0])
+        _log.debug("ROM[0] %08d", values[0])
         values = values[1::2]  # discard upper bytes
 
         while len(values):
             type = values[0] >> 14
             size = values[0] & 0x3fff
-            _log.debug("ROM Descriptor type=%d size=%d", type, size)
+            _log.info("ROM Descriptor type=%d size=%d", type, size)
 
             if type == 0:
                 break
 
             blob, values = values[1:size+1], values[size+1:]
-            if len(blob) != size:
+            if len(blob) != size and preamble_check is False:
+                _log.error("Truncated: %d", len(blob))
                 raise ValueError("Truncated ROM Descriptor")
 
+            _log.info("Checking for JSON")
             if type == 1:
                 blob = blob.tostring()
+                self.size_desc = size
                 if self.descript is None:
                     self.descript = blob
                 else:
                     _log.info("Extra ROM Text '%s'", blob)
+
             elif type == 2:
                 blob = ''.join(["%04x" % b for b in blob])
                 if self.jsonhash is None:
@@ -452,11 +475,33 @@ class LEEPDevice(DeviceBase):
                 else:
                     _log.info("Extra ROM Hash %s", blob)
 
-            elif type == 3:
+            elif type == 3 and preamble_check is False:
                 if self.regmap is not None:
                     _log.error("Ignoring additional JSON blob in ROM")
                 else:
-                    self.regmap = json.loads(zlib.decompress(blob.tostring()).decode('ascii'))
+                    _log.info("Found JSON blob in ROM")
+                    self.regmap = json.loads(zlib.decompress(
+                        blob.tostring()).decode('ascii'))
 
-        if self.regmap is None:
+            elif type == 3:
+                self.size_rom = size
+
+        if self.regmap is None and preamble_check is False:
             raise RuntimeError('ROM contains no JSON')
+
+    def _readrom(self):
+        self.descript = None
+        self.codehash = None
+        self.jsonhash = None
+        self.regmap = None
+
+        try:
+            _log.info("Trying with init_addr %d", self.init_rom_addr)
+            self.the_rom = self._trysize(self.init_rom_addr)
+        except (RuntimeError, ValueError):
+            _log.info("Trying with max_addr %d", self.max_rom_addr)
+            try:
+                self.the_rom = self._trysize(self.max_rom_addr)
+            except (RuntimeError, ValueError):
+                raise ValueError("Could not read ROM using either start addresses")
+        _log.info("ROM was successfully read")
