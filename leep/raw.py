@@ -508,4 +508,4 @@ class LEEPDevice(DeviceBase):
                 self.the_rom = self._trysize(self.max_rom_addr)
             except (RuntimeError, ValueError):
                 raise ValueError("Could not read ROM using either start addresses")
-        _log.info("ROM was successfully read")
+        _log.debug("ROM was successfully read")
