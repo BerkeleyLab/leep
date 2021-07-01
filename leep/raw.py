@@ -262,8 +262,8 @@ class LEEPDevice(DeviceBase):
         inst = self.instance + instance
         # assume that the shell_#_ number is the first
         mask = 1
-        if I:
-            mask = 2**int(I[0])
+        if inst:
+            mask = 2**int(inst[0])
 
         if self.resctrl:
             mask = 0xF  # Always re-arm 4 channels
