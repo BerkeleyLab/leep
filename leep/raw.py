@@ -38,7 +38,7 @@ def yscale_inj(wave_samp_per=1):
 
         # FW LO pre-scaling to cancel out non-unit CIC gain
         pre_gain = 2**shift_base/cic_period**cic_order
-        pre_gain *= 1/2
+        pre_gain *= 0.5
 
         per = cic_period * wave_samp_per
         bit_g = per**cic_order  # Bit growth
