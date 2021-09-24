@@ -15,6 +15,7 @@ from collections import defaultdict
 import numpy
 
 from . import open
+from . import RomError
 
 def readwrite(args, dev):
     for pair in args.reg:
@@ -231,7 +232,12 @@ def getargs():
 def main():
     args = getargs()
     logging.basicConfig(level=args.debug)
-    dev = open(args.dest, timeout=args.timeout, instance=args.inst)
+    try:
+        dev = open(args.dest, timeout=args.timeout, instance=args.inst)
+    except RomError as e:
+        _log.error("cli.py: %s, %s. Quitting." % (args.dest, str(e)))
+        return
+
     args.func(args, dev)
 
 if __name__ == '__main__':

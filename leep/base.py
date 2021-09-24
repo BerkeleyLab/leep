@@ -8,6 +8,12 @@ import re
 
 import numpy
 
+
+class RomError(Exception):
+    """Exception raised for errors during ROM read."""
+    pass
+
+
 # flags for _wait_acq
 IGNORE = "IGNORE"
 WARN = "WARN"
