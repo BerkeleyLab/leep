@@ -1,17 +1,23 @@
 
-import re
 import logging
 _log = logging.getLogger(__name__)
-# flags for _wait_acq
-IGNORE = "IGNORE"
-WARN = "WARN"
-ERROR = "ERROR"
+
+import json
+import zlib
+import re
+
+import numpy
 
 
 class RomError(Exception):
     """Exception raised for errors during ROM read."""
     pass
 
+
+# flags for _wait_acq
+IGNORE = "IGNORE"
+WARN = "WARN"
+ERROR = "ERROR"
 
 def open(addr, **kws):
     """Access to a single LEEP Device.
@@ -36,11 +42,9 @@ def open(addr, **kws):
     """
     if addr.startswith('ca://'):
         try:
-            import importlib
-            importlib.import_module('cothread')
-        except Exception:
-            raise RuntimeError(
-                'ca:// not available, cothread module not found in PYTHONPATH')
+            from cothread.catools import caget
+        except ImportError:
+            raise RuntimeError('ca:// not available, cothread module not found in PYTHONPATH')
         from .ca import CADevice
         return CADevice(addr[5:], **kws)
 
@@ -53,9 +57,7 @@ def open(addr, **kws):
         return FileDevice(addr[7:], **kws)
 
     else:
-        raise ValueError(
-            "Unknown '%s' must begin with ca://, leep://, or file://" % addr)
-
+        raise ValueError("Unknown '%s' must begin with ca://, leep://, or file://" % addr)
 
 class DeviceBase(object):
     backend = None  # 'ca' or 'leep'
@@ -86,19 +88,18 @@ class DeviceBase(object):
 
         # build a regexp
         # from a list of name fragments
-        inst = self.instance + instance + [name]
+        I = self.instance + instance + [name]
         # match when consecutive fragments are seperated by
         #  1. a single '_'.  ['A', 'B'] matches 'A_B'.
         #  2. two '_' with anything inbetween.  'A_blah_B' or 'A_x_y_z_B'.
-        inst = r'_(?:.*_)?'.join([re.escape(str(i)) for i in inst])
-        R = re.compile('^.*%s$' % inst)
+        I = r'_(?:.*_)?'.join([re.escape(str(i)) for i in I])
+        R = re.compile('^.*%s$' % I)
 
         ret = [x for x in self.regmap if R.match(x)]
         if len(ret) == 1:
             return ret[0]
         elif len(ret) > 1:
-            raise RuntimeError('%s Matches more than one register: %s' % (
-                R.pattern, ' '.join(ret)))
+            raise RuntimeError('%s Matches more than one register: %s' % (R.pattern, ' '.join(ret)))
         else:
             raise RuntimeError('No match for register pattern %s' % R.pattern)
 
@@ -130,7 +131,6 @@ class DeviceBase(object):
 
     def __setitem__(self, key, value):
         self.reg_write([(key, value)])
-
     def __getitem__(self, key):
         return self.reg_read([key])[0]
 
@@ -246,8 +246,7 @@ class DeviceBase(object):
 
                     N = 2**info.get('addr_width', 0)
                     if offset >= N:
-                        raise RuntimeError(
-                            'offset out of bounds (%s < %s)' % (offset, N))
+                        raise RuntimeError('offset out of bounds (%s < %s)' % (offset, N))
 
                     addr = info['base_addr'] + offset
 
@@ -265,9 +264,8 @@ class DeviceBase(object):
                     _inst, delay = inst
                     exp = self.regmap["__metadata__"]["tgen_granularity_log2"]
                     if exp < 0:
-                        raise RuntimeError(
-                            'tgen delay scale exponent out of bounds (%s < 0)' % (exp))
-                    delay = delay/(pow(2, exp))
+                        raise RuntimeError('tgen delay scale exponent out of bounds (%s < 0)' % (exp))
+                    delay = delay/(pow(2,exp))
                     delay = int(delay)
 
                     assert delay >= 0, inst
@@ -301,8 +299,7 @@ class DeviceBase(object):
         maxcnt = 2**info['addr_width']
         assert maxcnt >= 4, info
         if len(ret) > maxcnt-4:
-            raise RuntimeError('tget Sequence %d exceeds max %d' %
-                               (len(ret), maxcnt-4))
+            raise RuntimeError('tget Sequence %d exceeds max %d' % (len(ret), maxcnt-4))
         ret.extend([0]*(maxcnt-len(ret)))
         assert len(ret) == maxcnt, (len(ret), maxcnt)
         return ret
