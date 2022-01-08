@@ -245,7 +245,7 @@ class LEEPDevice(DeviceBase):
         chans, =  self.reg_read(['chan_keep'], instance=instance)
         return chans
 
-    def wait_for_acq(self, tag=False, toggle_tag=False, timeout=5.0, instance=[]):
+    def wait_for_acq(self, tag=False, toggle_tag=False, timeout=5.0, instance=[], is_simulation=False):
         """Wait for next waveform acquisition to complete.
         If tag=True, then wait for the next acquisition which includes the
         side-effects of all preceding register writes
@@ -278,7 +278,7 @@ class LEEPDevice(DeviceBase):
                 now = datetime.utcnow()
                 delta = now-start
                 delta_us = delta.seconds + delta.microseconds/1e6
-                if delta_us >= timeout:
+                if delta_us >= timeout and not is_simulation:
                     raise RuntimeError('Timeout')
 
                 # TODO: use exchange() and optimize to fetch slow_data[33] as well
