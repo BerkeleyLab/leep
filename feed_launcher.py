@@ -39,7 +39,7 @@ class Delta(object):
 class ProcControl(object):
     all_procs = set()
     def __init__(self, pref, args, logto=None, **kws):
-        self.pref = bytes(pref)
+        self.pref = pref
         self.args, self.logto, self.launch_args = args, logto, kws
 
         _log.debug("%s Setup", self.pref)
@@ -47,11 +47,11 @@ class ProcControl(object):
         # wakeup with one of the command tokens
         self.evt = cothread.EventQueue()
 
-        self.cmd_start = ca.camonitor(b'%sSTRT_'%self.pref, Delta(lambda _val:self.evt.Signal(start)), notify_disconnect=True)
-        self.cmd_stop  = ca.camonitor(b'%sSTOP_'%self.pref, Delta(lambda _val:self.evt.Signal(stop)),  notify_disconnect=True)
-        self.cmd_abort = ca.camonitor(b'%sABRT_'%self.pref, Delta(lambda _val:self.evt.Signal(abort)), notify_disconnect=True)
+        self.cmd_start = ca.camonitor('%sSTRT_'%self.pref, Delta(lambda _val:self.evt.Signal(start)), notify_disconnect=True)
+        self.cmd_stop  = ca.camonitor('%sSTOP_'%self.pref, Delta(lambda _val:self.evt.Signal(stop)),  notify_disconnect=True)
+        self.cmd_abort = ca.camonitor('%sABRT_'%self.pref, Delta(lambda _val:self.evt.Signal(abort)), notify_disconnect=True)
 
-        ca.caput(b'%sSTS'%self.pref, 0, wait=True)
+        ca.caput('%sSTS'%self.pref, 0, wait=True)
 
         self.child = None
 
@@ -113,7 +113,7 @@ class ProcControl(object):
             else:
                 sts = 0 # Crash
 
-        ca.caput(b'%sSTS'%self.pref, sts, wait=True)
+        ca.caput('%sSTS'%self.pref, sts, wait=True)
 
         self.current_status = sts
 
@@ -141,8 +141,8 @@ class ProcControl(object):
                 if fp is not None:
                     fp.close()
 
-            ca.caput(b'%sSTS'%self.pref, 2, wait=True)
-            ca.caput(b'%sTS'%self.pref, time.strftime("%Y-%m-%d-%H:%M:%S",time.localtime(sec)), wait=True)
+            ca.caput('%sSTS'%self.pref, 2, wait=True)
+            ca.caput('%sTS'%self.pref, time.strftime("%Y-%m-%d-%H:%M:%S",time.localtime(sec)), wait=True)
 
     def handle_stop(self):
         if self.current_status == 2:
@@ -230,8 +230,8 @@ def main(args):
     try:
         conf = json.loads(conf)
     except ValueError as e:
-        print conf
-        print 'Syntax Error:', e
+        print(conf)
+        print('Syntax Error:', e)
         sys.exit(1)
 
     for name, sect in conf['procs'].items():
