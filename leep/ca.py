@@ -8,6 +8,8 @@ import datetime
 
 import numpy
 
+from functools import reduce
+
 from .base import DeviceBase, IGNORE, WARN, ERROR
 
 caget = caput = camonitor = None
