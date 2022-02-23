@@ -69,7 +69,19 @@ class ProcControl(object):
         except:
             _log.exception("%s close() join"%self.pref)
 
-        assert self.child is None or self.child.poll() is not None, (self.child and self.child.poll())
+        max_tries = 5
+        tries = 1
+        while (self.child_term() is False) and (tries < max_tries):
+            tries += 1
+            time.sleep(0.01)
+        if tries > 1:
+            _log.debug("%s %i tries to terminate process", self.pref, tries)
+            if tries == max_tries:
+                _log.warning("%s failed to terminate process in %i tries",
+                             self.pref, tries)
+
+    def child_term(self):
+        return self.child is None or self.child.poll() is not None
 
     def sigchld(self):
         self.evt.Signal(sigchld)
