@@ -204,6 +204,10 @@ def handle_child(sig, frame):
     _log.debug("SIGCHLD 1")
     cothread.Callback(poke_all)
 
+def handle_term(sig, frame):
+    _log.debug("SIGTERM")
+    raise SystemExit
+
 def getargs():
     from argparse import ArgumentParser
     P=ArgumentParser()
@@ -215,6 +219,7 @@ def main(args):
     logging.basicConfig(level=args.debug, format='%(asctime)s %(levelname)s %(message)s')
 
     signal.signal(signal.SIGCHLD, handle_child)
+    signal.signal(signal.SIGTERM, handle_term)
 
     confdir = os.path.dirname(args.config)
 
@@ -241,7 +246,7 @@ def main(args):
 
     try:
         cothread.WaitForQuit()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         pass
 
     for proc in ProcControl.all_procs:
