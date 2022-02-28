@@ -72,7 +72,8 @@ class ProcControl(object):
         if self.child_term() is False:
             time.sleep(0.1)
             term = self.child_term()
-            _log.debug("%s second test for terminated process: %s", self.pref, term)
+            if term is False:
+                _log.warn("%s process not terminated after 2 tests", self.pref)
 
     def child_term(self):
         return self.child is None or self.child.poll() is not None
