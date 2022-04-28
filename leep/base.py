@@ -5,6 +5,7 @@ _log = logging.getLogger(__name__)
 import json
 import zlib
 import re
+import os
 
 import numpy
 
@@ -18,6 +19,25 @@ class RomError(Exception):
 IGNORE = "IGNORE"
 WARN = "WARN"
 ERROR = "ERROR"
+
+
+# Decorator to wrap read/write functions
+def print_reg(fcn):
+    def wrapper(*args, **kwargs):
+        # args[0] is the 'self' reference
+        if args[0].trace:
+            regs = args[1]
+            if len(regs) and isinstance(regs[0], str):
+                # it's a read operation
+                for reg in regs:
+                    print('reading register {}'.format(reg))
+            else:
+                # it's a write operation, 'regs' is now a tuple, not str
+                for reg, val in regs:
+                    print('writing {} to register {}'.format(val, reg))
+        return fcn(*args, **kwargs)
+    return wrapper
+
 
 def open(addr, **kws):
     """Access to a single LEEP Device.
@@ -64,6 +84,13 @@ class DeviceBase(object):
 
     def __init__(self, instance=[]):
         self.instance = instance[:]  # shallow copy
+
+        # Machinery to enable r/w tracing. See print_reg decorator.
+        self.trace = False
+        pat = re.compile(r'\byes\b | \btrue\b | \b1\b', flags=re.I | re.X)
+        tr = os.getenv('LEEP_TRACE_RW')
+        if tr is not None and re.match(pat, tr):
+            self.trace = True
 
     def close(self):
         pass

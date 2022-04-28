@@ -18,7 +18,7 @@ _spam = logging.getLogger(__name__+'.packets')
 _spam.propagate = False
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "."))
-from base import DeviceBase
+from base import DeviceBase, print_reg
 
 if sys.version_info >= (3, 0):
     unicode = str
@@ -138,6 +138,7 @@ class LEEPDevice(DeviceBase):
         else:
             self.rfs = True
 
+    @print_reg
     def reg_write(self, ops, instance=[]):
 
         assert isinstance(ops, (list, tuple))
@@ -173,6 +174,7 @@ class LEEPDevice(DeviceBase):
 
         self.exchange(addrs, values)
 
+    @print_reg
     def reg_read(self, names, instance=[]):
         addrs = []
         lens = []

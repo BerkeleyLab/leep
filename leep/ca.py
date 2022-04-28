@@ -10,7 +10,7 @@ import numpy
 
 from functools import reduce
 
-from .base import DeviceBase, IGNORE, WARN, ERROR
+from .base import DeviceBase, print_reg, IGNORE, WARN, ERROR
 
 caget = caput = camonitor = None
 try:
@@ -88,6 +88,7 @@ class CADevice(DeviceBase):
         pvname = self.pv_name(name, tag, instance=instance)
         caput(pvname, value, wait=wait, timeout=timeout or self.timeout)
 
+    @print_reg
     def reg_write(self, ops, instance=[]):
         for name, value in ops:
             name = self.expand_regname(name, instance=instance)
@@ -99,6 +100,7 @@ class CADevice(DeviceBase):
 
             caput(pvname, value, wait=True, timeout=self.timeout)
 
+    @print_reg
     def reg_read(self, names, instance=[]):
         ret = [None]*len(names)
         for i, name in enumerate(names):
