@@ -45,7 +45,7 @@ def yscale_inj(wave_samp_per=1):
         bit_g = per**cic_order  # Bit growth
         bit_g_shift = ceil(log(bit_g, 2))
         wave_shift = bit_g_shift - shift_base
-        wave_shift *= 1 / cic_order  # FW accounts for cic_order when shifting
+        wave_shift *= 1.0 / cic_order  # FW accounts for cic_order when shifting
 
         cic_gain = bit_g / 2**(cic_order*wave_shift + shift_base)
 

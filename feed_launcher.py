@@ -69,7 +69,14 @@ class ProcControl(object):
         except:
             _log.exception("%s close() join"%self.pref)
 
-        assert self.child is None or self.child.poll() is not None, (self.child and self.child.poll())
+        if self.child_term() is False:
+            time.sleep(0.1)
+            term = self.child_term()
+            if term is False:
+                _log.warn("%s process not terminated after 2 tests", self.pref)
+
+    def child_term(self):
+        return self.child is None or self.child.poll() is not None
 
     def sigchld(self):
         self.evt.Signal(sigchld)
@@ -204,6 +211,10 @@ def handle_child(sig, frame):
     _log.debug("SIGCHLD 1")
     cothread.Callback(poke_all)
 
+def handle_term(sig, frame):
+    _log.debug("SIGTERM")
+    raise SystemExit
+
 def getargs():
     from argparse import ArgumentParser
     P=ArgumentParser()
@@ -215,6 +226,7 @@ def main(args):
     logging.basicConfig(level=args.debug, format='%(asctime)s %(levelname)s %(message)s')
 
     signal.signal(signal.SIGCHLD, handle_child)
+    signal.signal(signal.SIGTERM, handle_term)
 
     confdir = os.path.dirname(args.config)
 
@@ -241,7 +253,7 @@ def main(args):
 
     try:
         cothread.WaitForQuit()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         pass
 
     for proc in ProcControl.all_procs:
