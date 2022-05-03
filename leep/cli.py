@@ -17,6 +17,7 @@ import numpy
 from . import open
 from . import RomError
 
+
 def readwrite(args, dev):
     for pair in args.reg:
         name, _eq, val = pair.partition('=')
@@ -37,6 +38,7 @@ def listreg(args, dev):
     for reg in regs:
         print(reg)
 
+
 def acquire(args, dev):
     if args.plot:
         from matplotlib import pylab
@@ -55,8 +57,10 @@ def acquire(args, dev):
     if args.plot:
         pylab.show()
 
+
 def decimate(args, dev):
     dev.set_decimate(args.div)
+
 
 def dumpaddrs(args, dev):
     regs = []
@@ -87,9 +91,11 @@ def dumpaddrs(args, dev):
             continue
         print("%08x %08x" % (addr, value))
 
+
 def dumpjson(args, dev):
     json.dump(dev.regmap, sys.stdout, indent=2)
     sys.stdout.write('\n')
+
 
 def dumpdrv(args, dev):
     if dev.backend != 'ca':
@@ -98,15 +104,18 @@ def dumpdrv(args, dev):
     json.dump(dev._info, sys.stdout, indent=2)
     sys.stdout.write('\n')
 
+
 class MapDirect(object):
 
     def __call__(self, name):
         return 'reg_'+name
 
+
 class MapPlain(object):
 
     def __call__(self, name):
         return name
+
 
 class MapShort(object):
 
@@ -117,11 +126,12 @@ class MapShort(object):
         N, self._next = self._next, self._next+1
         return 'REG%x' % N
 
+
 def gentemplate(args, dev):
     mapper = {
-        'short':MapShort,
-        'long':MapDirect,
-        'plain':MapPlain,
+        'short': MapShort,
+        'long': MapDirect,
+        'plain': MapPlain,
     }[args.mode]()
 
     files = defaultdict(list)
@@ -177,6 +187,7 @@ def gentemplate(args, dev):
         sys.stdout.write(out.read())
     else:
         shutil.copyfile(out.name, args.output)
+
 
 def getargs():
     from argparse import ArgumentParser
@@ -239,6 +250,7 @@ def main():
         return
 
     args.func(args, dev)
+
 
 if __name__ == '__main__':
     main()

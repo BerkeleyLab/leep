@@ -20,19 +20,22 @@ except ImportError:
 else:
     from cothread import Event
 
+
 def caget(*args, **kws):
     try:
         R = _caget(*args, **kws)
-    except:
+    except Exception:
         _log.exception('Error caget(%s, %s)' % (args, kws))
         raise
     else:
         _log.debug('caget(%s, %s) -> %s' % (args, kws, R))
     return R
 
+
 def caput(*args, **kws):
     _log.debug('caput(%s, %s' % (args, kws))
     _caput(*args, **kws)
+
 
 class CADevice(DeviceBase):
     backend = 'ca'
@@ -148,11 +151,11 @@ class CADevice(DeviceBase):
         # assume that the shell_#_ number is the first
 
         if type(chans) is int:
-            l = []
+            li = []
             for i in range(12):
-                if chans&(1<<i):
-                    l.append(11-i)
-            chans = tuple(l)
+                if chans & (1 << i):
+                    li.append(11-i)
+            chans = tuple(li)
 
         chans = set(chans)
         disable = set(range(12)) - chans

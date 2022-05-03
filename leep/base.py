@@ -79,6 +79,7 @@ def open(addr, **kws):
     else:
         raise ValueError("Unknown '%s' must begin with ca://, leep://, or file://" % addr)
 
+
 class DeviceBase(object):
     backend = None  # 'ca' or 'leep'
 
@@ -158,6 +159,7 @@ class DeviceBase(object):
 
     def __setitem__(self, key, value):
         self.reg_write([(key, value)])
+
     def __getitem__(self, key):
         return self.reg_read([key])[0]
 
@@ -292,7 +294,7 @@ class DeviceBase(object):
                     exp = self.regmap["__metadata__"]["tgen_granularity_log2"]
                     if exp < 0:
                         raise RuntimeError('tgen delay scale exponent out of bounds (%s < 0)' % (exp))
-                    delay = delay/(pow(2,exp))
+                    delay = delay/(pow(2, exp))
                     delay = int(delay)
 
                     assert delay >= 0, inst

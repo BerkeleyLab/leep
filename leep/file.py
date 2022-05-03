@@ -9,6 +9,7 @@ import json
 
 from .base import DeviceBase, IGNORE, WARN, ERROR
 
+
 class FileDevice(DeviceBase):
     backend = 'file'
 
