@@ -1,4 +1,3 @@
-
 import logging
 _log = logging.getLogger(__name__)
 
@@ -10,13 +9,13 @@ import numpy
 
 from functools import reduce
 
-from .base import DeviceBase, print_reg, IGNORE, WARN, ERROR
+from .base import DeviceBase, print_reg
 
 caget = caput = camonitor = None
 try:
     from cothread.catools import caget as _caget, caput as _caput, camonitor, FORMAT_TIME, DBR_CHAR_STR
 except ImportError:
-    pass
+    raise RuntimeError('ca:// not available, cothread module not found in PYTHONPATH')
 else:
     from cothread import Event
 
@@ -134,20 +133,17 @@ class CADevice(DeviceBase):
         return '<not implemented>'
 
     def get_decimate(self, instance=[]):
-        I = self.instance
         # return list to be compatible with raw.py get_decimate
         return [self.pv_read('wave_samp_per', 'setting', instance=instance)]
 
     def set_decimate(self, dec, instance=[]):
         assert dec >= 1 and dec <= 255
-        I = self.instance
         self.pv_write('wave_samp_per', 'setting', dec, instance=instance)
 
     def set_channel_mask(self, chans=None, instance=[]):
-        """Enabled specified channels.
-        chans may be a bit mask or a list of channel numbers
+        """ Enabled specified channels.
+            chans may be a bit mask or a list of channel numbers
         """
-        I = self.instance + instance
         # assume that the shell_#_ number is the first
 
         if type(chans) is int:
@@ -167,7 +163,6 @@ class CADevice(DeviceBase):
             [self.pv_write('circle_data', 'enable%d' % ch, 'Enable') for ch in chans]
 
     def get_channel_mask(self, instance=[]):
-        I = self.instance + instance
         # make list of masks for each bit which is set.
         chans = [2**(11-n) for n in range(12) if self.pv_read('circle_data', 'enable%d' % n)]
         return reduce(lambda l, r: l | r, chans, 0)

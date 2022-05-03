@@ -1,13 +1,8 @@
-
 import logging
 _log = logging.getLogger(__name__)
 
-import json
-import zlib
 import re
 import os
-
-import numpy
 
 
 class RomError(Exception):
@@ -61,10 +56,6 @@ def open(addr, **kws):
     :returns: :py:class:`base.DeviceBase`
     """
     if addr.startswith('ca://'):
-        try:
-            from cothread.catools import caget
-        except ImportError:
-            raise RuntimeError('ca:// not available, cothread module not found in PYTHONPATH')
         from .ca import CADevice
         return CADevice(addr[5:], **kws)
 
@@ -116,12 +107,12 @@ class DeviceBase(object):
 
         # build a regexp
         # from a list of name fragments
-        I = self.instance + instance + [name]
+        fragments = self.instance + instance + [name]
         # match when consecutive fragments are seperated by
         #  1. a single '_'.  ['A', 'B'] matches 'A_B'.
         #  2. two '_' with anything inbetween.  'A_blah_B' or 'A_x_y_z_B'.
-        I = r'_(?:.*_)?'.join([re.escape(str(i)) for i in I])
-        R = re.compile('^.*%s$' % I)
+        regx = r'_(?:.*_)?'.join([re.escape(str(i)) for i in fragments])
+        R = re.compile('^.*%s$' % regx)
 
         ret = [x for x in self.regmap if R.match(x)]
         if len(ret) == 1:

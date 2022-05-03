@@ -1,4 +1,3 @@
-
 from __future__ import print_function
 
 import logging
@@ -7,7 +6,7 @@ _log = logging.getLogger(__name__)
 import hashlib
 import json
 
-from .base import DeviceBase, IGNORE, WARN, ERROR
+from .base import DeviceBase
 
 
 class FileDevice(DeviceBase):
