@@ -28,4 +28,4 @@ class FileDevice(DeviceBase):
         pass
 
     def reg_read(self, names, instance=[]):
-        return [0]*len(names)
+        return [0] * len(names)
