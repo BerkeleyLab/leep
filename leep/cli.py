@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import logging
-_log = logging.getLogger(__name__)
 
 import json
 import sys
@@ -15,6 +14,9 @@ import numpy
 
 from . import open
 from . import RomError
+
+
+_log = logging.getLogger(__name__)
 
 
 def readwrite(args, dev):

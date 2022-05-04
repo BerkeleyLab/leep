@@ -1,5 +1,4 @@
 import logging
-_log = logging.getLogger(__name__)
 
 import json
 import zlib
@@ -20,6 +19,9 @@ except ImportError:
     raise RuntimeError(msg)
 else:
     from cothread import Event
+
+
+_log = logging.getLogger(__name__)
 
 
 def caget(*args, **kws):

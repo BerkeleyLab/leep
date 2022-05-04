@@ -1,8 +1,10 @@
 import logging
-_log = logging.getLogger(__name__)
 
 import re
 import os
+
+
+_log = logging.getLogger(__name__)
 
 
 class RomError(Exception):
