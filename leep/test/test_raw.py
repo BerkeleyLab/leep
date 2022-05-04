@@ -46,7 +46,7 @@ class SimServer(object):
             'data_width': 32,
         },
         '__metadata__': {
-          'application': 'testing',
+            'application': 'testing',
         },
     }
 
