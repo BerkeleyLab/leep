@@ -216,13 +216,23 @@ def handle_term(sig, frame):
     raise SystemExit
 
 def getargs():
-    from argparse import ArgumentParser
-    P=ArgumentParser()
+    from argparse import ArgumentParser, RawDescriptionHelpFormatter
+    from textwrap import dedent
+
+    datadir = os.path.dirname(__file__)
+    conf_example = open(os.path.join(datadir, 'launcher.conf')).read()
+
+    P=ArgumentParser(formatter_class=RawDescriptionHelpFormatter,
+                     epilog=dedent(conf_example))
     P.add_argument('config', help='JSON config file')
-    P.add_argument('-d','--debug', action='store_const', const=logging.DEBUG, default=logging.INFO)
+    P.add_argument('-d','--debug', action='store_const', const=logging.DEBUG,
+                   default=logging.INFO)
+
     return P.parse_args()
 
-def main(args):
+def main():
+    args = getargs()
+
     logging.basicConfig(level=args.debug, format='%(asctime)s %(levelname)s %(message)s')
 
     signal.signal(signal.SIGCHLD, handle_child)
@@ -262,4 +272,4 @@ def main(args):
     kp.close()
 
 if __name__=='__main__':
-    main(getargs())
+    main()
