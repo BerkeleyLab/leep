@@ -1,0 +1,3 @@
+cothread
+numpy
+matplotlib
