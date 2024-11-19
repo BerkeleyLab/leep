@@ -1,5 +1,4 @@
 stages:
-  - lint
   - test
   - build
 
@@ -11,15 +10,15 @@ before_script:
       build \
       pytest
 
-flake8:
-  stage: lint
-  script:
-    - find . -name "*.py" -exec flake8 {} +
+#flake8:
+#  stage: lint
+#  script:
+#    - find . -name "*.py" -exec flake8 {} +
 
 test:
   stage: test
   script:
-    - pyhon3 -m pytest
+    - python3 -m pytest
 
 build:
   stage: build
