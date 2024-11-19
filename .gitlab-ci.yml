@@ -1,4 +1,5 @@
 stages:
+  - lint
   - test
   - build
 
@@ -8,12 +9,14 @@ before_script:
   - python3 -m pip install \
       flake8 \
       build \
+      twine \
       pytest
 
-#flake8:
-#  stage: lint
-#  script:
-#    - find . -name "*.py" -exec flake8 {} +
+flake8:
+  stage: lint
+  script:
+    - find . -name "*.py" -exec flake8 {} +
+  allow_failure: true
 
 test:
   stage: test
@@ -25,3 +28,4 @@ build:
   stage: build
   script:
     - python3 -m build
+    - python3 -m twine upload --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
