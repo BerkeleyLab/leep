@@ -1,3 +1,31 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=64", "setuptools-scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "leep"
+description = "LBNL Embedded Ethernet Protocol tooling"
+dependencies = [
+    "cothread",
+    "numpy",
+    "matplotlib",
+]
+authors = [
+    {name = "Michael Davidsaver", email = "mdavidsaver@gmail.com"}
+]
+readme = "README.md"
+license = {file = "LICENSE.md"}
+classifiers = [
+    "Programming Language :: Python :: 2",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://gitlab.lbl.gov/drivers/leep"
+Issues = "https://gitlab.lbl.gov/drivers/leep/issues"
+
+[tool.setuptools_scm]
+version_file = "leep/__version__.py"
