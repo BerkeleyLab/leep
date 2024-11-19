@@ -3,14 +3,11 @@ stages:
   - test
   - build
 
-image: python:3.10-slim
+variables:
+  CI_REGISTRY: mohs.dhcp.lbl.gov
+  CONTAINER_IMAGE: $CI_REGISTRY/python_env_bookworm
 
-before_script:
-  - python3 -m pip install \
-      flake8 \
-      build \
-      twine \
-      pytest
+image: $CONTAINER_IMAGE
 
 flake8:
   stage: lint
