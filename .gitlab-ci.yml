@@ -1,0 +1,27 @@
+stages:
+  - lint
+  - test
+  - build
+
+image: python:3.10-slim
+
+before_script:
+  - python3 -m pip install \
+      flake8 \
+      build \
+      pytest
+
+flake8:
+  stage: lint
+  script:
+    - find . -name "*.py" -exec flake8 {} +
+
+test:
+  stage: test
+  script:
+    - pyhon3 -m pytest
+
+build:
+  stage: build
+  script:
+    - python3 -m build
