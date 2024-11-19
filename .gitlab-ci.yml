@@ -19,7 +19,7 @@ test:
   stage: test
   script:
     - python3 -m pip install -r requirements.txt
-    - python3 -m pytest
+    - python3 -m pytest -v
 
 build:
   stage: build
