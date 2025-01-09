@@ -27,5 +27,8 @@ dynamic = ["version"]
 Homepage = "https://gitlab.lbl.gov/drivers/leep"
 Issues = "https://gitlab.lbl.gov/drivers/leep/issues"
 
+[project.scripts]
+leep = "leep.cli:main"
+
 [tool.setuptools_scm]
 version_file = "leep/__version__.py"
