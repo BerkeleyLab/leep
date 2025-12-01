@@ -34,25 +34,19 @@ build:
 
 .publish:
   stage: publish
-  # Get artifacts from this job, needed to compile the sofware
   needs:
     - job: build
       artifacts: true
   script:
-    - python3 -m twine upload --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
+    - python3 -m twine upload --repository ${PYPI_REPOSITORY} dist/*
 
-publish-snapshot:
+publish-pypi:
   extends: .publish
+  variables:
+    PYPI_REPOSITORY: pypi
+    TWINE_USERNAME: ${PYPI_USERNAME}
+    TWINE_PASSWORD: ${PYPI_TOKEN}
   rules:
-    # only when not tag
-    - if: '$CI_COMMIT_TAG'
-      when: never
-    - when: on_success
-
-publish-release:
-  extends: .publish
-  rules:
-    # only tags
-    - if: '$CI_COMMIT_TAG'
+    - if: "$CI_COMMIT_TAG"
       when: on_success
     - when: never
