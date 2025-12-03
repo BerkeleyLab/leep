@@ -17,6 +17,8 @@ flake8:
   allow_failure: true
 
 leep_test:
+  before_script:
+    - pip3 install numpy
   stage: test
   script:
     - python3 -m unittest -v
