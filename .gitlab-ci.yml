@@ -16,6 +16,12 @@ flake8:
     - find . -name "*.py" -exec flake8 {} +
   allow_failure: true
 
+leep_test:
+  stage: test
+  script:
+    - python3 -m unittest -v
+    - cd leep && make && make clean
+
 test:
   stage: test
   script:
