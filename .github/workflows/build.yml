@@ -1,17 +1,55 @@
-name: LEEP release
+name: LEEP
 
-on:
-  workflow_run:
-    workflows: [LEEP tests]
-    types: [completed]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  build:
+  test:
 
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-      # && startsWith(github.ref, 'refs/tags/v')
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu latest with py3.x
+            os: ubuntu-latest
+            python: "3.x"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup python
+        uses: actions/setup-python@v6
+        with:
+            python-version: ${{ matrix.python }}
+
+      - name: Install basic Python packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest flake8
+          which python
+          python --version
+          python -m pip --version
+          python -m pytest --version
+          python -m flake8 --version
+
+      - name: Lint
+        run: |
+          flake8
+        continue-on-error: true
+
+      - name: Test
+        run: |
+          python -m pytest -v
+
+  release:
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    needs: test
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
     strategy:
       fail-fast: false
@@ -35,12 +73,15 @@ jobs:
           python -m pip install \
                 "setuptools>=64" \
                 "setuptools-scm>=8" \
+                build \
                 wheel \
                 twine
           which python
           python --version
           python -m pip --version
-          python -m twine -h
+          python -m build --version
+          python -m wheel version
+          python -m twine --version
 
       - name: Build
         run: |
@@ -64,10 +105,10 @@ jobs:
         run: |
           python -m twine check dist/leep*.tar.*
 
-      #- name: Upload package
-      #  env:
-      #    PYPI_REPOSITORY: pypi
-      #    TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-      #    TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-      #  run: |
-      #    python -m twine upload --repository ${PYPI_REPOSITORY} dist/*
+      - name: Upload package
+        env:
+          PYPI_REPOSITORY: pypi
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: |
+          python -m twine upload --repository ${{ env.PYPI_REPOSITORY }} dist/*
