@@ -73,12 +73,15 @@ jobs:
           python -m pip install \
                 "setuptools>=64" \
                 "setuptools-scm>=8" \
+                build \
                 wheel \
                 twine
           which python
           python --version
           python -m pip --version
-          python -m twine -h
+          python -m build --version
+          python -m wheel version
+          python -m twine --version
 
       - name: Build
         run: |
