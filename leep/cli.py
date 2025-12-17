@@ -43,27 +43,16 @@ def parseTransaction(xact):
         Example                 Implied Transaction
         -------------------------------------------
         regname                 Read from named register (str) 'regname'
-        regaddr                 Read from explicit address (int) 'regaddr'
         regname=val             Write (int) 'val' to named register (str) 'regname'
-        regaddr=val             Write (int) 'val' to explicit address (int) 'regaddr'
         regname=val0,...,valN   Write (int) 'val0' through 'valN' to consecutive addresses beginning at the
                                 address of named register (str) 'regname'
-        regaddr=val0,...,valN   Write (int) 'val0' through 'valN' to consecutive addresses beginning at
-                                address (int) 'regaddr'
         regname+offset          Read from address = romx['regname']['base_addr'] + (int) 'offset'
-        regaddr+offset          Read from address = (int) 'regaddr' + (int) 'offset'
         regname:size            Read (int) 'size' elements starting from address romx['regname']['base_addr']
-        regaddr:size            Read (int) 'size' elements starting from (int) 'regaddr'
         regname+offset=val      Write (int) 'val' to address romx['regname']['base_addr'] + (int) 'offset'
         regname+offset=val0,...,valN    Write (int) 'val0' through 'valN' to consecutive addresses beginning at
                                         address romx['regname']['base_addr'] + (int) 'offset'
-        regaddr+offset=val      Write (int) 'val' to address (int) 'regaddr' + (int) 'offset'
-        regaddr+offset=val0,...,valN    Write (int) 'val0' through 'valN' to consecutive addresses beginning at
-                                        address (int) 'regaddr'
         regname+offset:size     Read (int) 'size' elements starting from address romx['regname']['base_addr'] + \
                                 (int) 'offset'
-        regaddr+offset:size     Read (int) 'size' elements starting from (int) 'regaddr' + (int) 'offset'
-    I'm not sure what use case the "regaddr+offset" syntax supports, but it does no harm to include it.
     NOTE! Deliberately not supporting "regname-offset" (negative offsets) as it's use case is unclear
     and a '_' to '-' typo could potentially collide with legitimate transactions.
     """
@@ -74,13 +63,16 @@ def parseTransaction(xact):
     size = None
     if _match:
         groups = _match.groups()
-        regstr = groups[0]  # Always starts with 'regname' or 'regaddr'
+        regstr = groups[0]  # Always starts with 'regname'
+        if regstr.isdigit() or regstr.lower().startswith("0x") or regstr.lower().startswith("0b"):
+            raise ValueError("Absolute numeric addresses are not allowed. Use symbolic register names instead.")
         if groups[1] == '=':
             wval = _expandWriteVals(groups[2])
         elif groups[1] == '+':
             offset = _int(groups[2])
         elif groups[1] == ':':
             size = _int(groups[2])
+
         if groups[3] == '=':
             if groups[1] == '=':
                 raise Exception("Malformed transaction: {}".format(xact))
@@ -91,15 +83,9 @@ def parseTransaction(xact):
             size = _int(groups[4])
     else:
         raise Exception("Failed to match: {}".format(xact))
-    try:
-        reg = _int(regstr)
-    except ValueError:
-        reg = regstr
+    reg = regstr
     if size is None:
-        if wval is None:
-            size = None
-        else:
-            size = 0
+        size = 0 if wval is not None else None
     return (reg, offset, size, wval)
 
 

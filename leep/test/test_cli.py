@@ -238,46 +238,48 @@ def test_parseTransaction():
         # CLI string: result (reg, offset, read_size, write_vals)
         # regname                 Read from named register (str) 'regname'
         "foo": ("foo", 0, None, None),
-        # regaddr                 Read from explicit address (int) 'regaddr'
-        "0x100": (0x100, 0, None, None),
         # regname=val             Write (int) 'val' to named register (str) 'regname'
         "foo=42": ("foo", 0, 0, 42),
         "bar=0x42": ("bar", 0, 0, 0x42),
         "foo_baz=0b100": ("foo_baz", 0, 0, 0b100),
-        # regaddr=val             Write (int) 'val' to explicit address (int) 'regaddr'
-        "0x123=100": (0x123, 0, 0, 100),
-        "123=0xabc": (123, 0, 0, 0xabc),
-        "0b1010=-10": (0b1010, 0, 0, -10),
         # regname=val0,...,valN   Write (int) 'val0' through 'valN' to consecutive addresses beginning at the
         #                         address of named register (str) 'regname'
         "reg_foo=1,2,3,4,5": ("reg_foo", 0, 0, [1, 2, 3, 4, 5]),
-        # regaddr=val0,...,valN   Write (int) 'val0' through 'valN' to consecutive addresses beginning at
-        #                         address (int) 'regaddr'
-        "0x4000=1,-1,0,42,0x10": (0x4000, 0, 0, [1, -1, 0, 42, 0x10]),
         # regname+offset          Read from address = romx['regname']['base_addr'] + (int) 'offset'
         "BINGO+100": ("BINGO", 100, None, None),
-        # regaddr+offset          Read from address = (int) 'regaddr' + (int) 'offset'
-        "0x100+100": (0x100, 100, None, None),
         # regname:size            Read (int) 'size' elements starting from address romx['regname']['base_addr']
         "_reg_:32": ("_reg_", 0, 32, None),
-        # regaddr:size            Read (int) 'size' elements starting from (int) 'regaddr'
-        "0:0xff": (0, 0, 0xff, None),
         # regname+offset=val      Write (int) 'val' to address romx['regname']['base_addr'] + (int) 'offset'
         "bandit+0x100=5000": ("bandit", 0x100, 0, 5000),
         # regname+offset=val0,...,valN    Write (int) 'val0' through 'valN' to consecutive addresses beginning at
         #                                 address romx['regname']['base_addr'] + (int) 'offset'
         "status+0x20=50,40,0x30": ("status", 0x20, 0, [50, 40, 0x30]),
-        # regaddr+offset=val      Write (int) 'val' to address (int) 'regaddr' + (int) 'offset'
-        "128+0xc0=-1000": (128, 0xc0, 0, -1000),
-        # regaddr+offset=val0,...,valN    Write (int) 'val0' through 'valN' to consecutive addresses beginning at
-        #                                 address (int) 'regaddr'
-        "0x128+0xc0=1,0,1,0,2": (0x128, 0xc0, 0, [1, 0, 1, 0, 2]),
         # regname+offset:size     Read (int) 'size' elements starting from address romx['regname']['base_addr'] + \
         #                         (int) 'offset'
         "Socks+0x100:100": ("Socks", 0x100, 100, None),
-        # regaddr+offset:size     Read (int) 'size' elements starting from (int) 'regaddr' + (int) 'offset'
-        "0x4000+15:0b1111": (0x4000, 15, 0b1111, None),
     }
+    bads = [
+        # regaddr                 Read from explicit address (int) 'regaddr'
+        "0x100",
+        # regaddr=val             Write (int) 'val' to explicit address (int) 'regaddr'
+        "0x123=100",
+        "123=0xabc",
+        "0b1010=-10",
+        # regaddr=val0,...,valN   Write (int) 'val0' through 'valN' to consecutive addresses beginning at
+        #                         address (int) 'regaddr'
+        "0x4000=1,-1,0,42,0x10",
+        # regaddr+offset          Read from address = (int) 'regaddr' + (int) 'offset'
+        "0x100+100",
+        # regaddr:size            Read (int) 'size' elements starting from (int) 'regaddr'
+        "0:0xff",
+        # regaddr+offset=val      Write (int) 'val' to address (int) 'regaddr' + (int) 'offset'
+        "128+0xc0=-1000",
+        # regaddr+offset=val0,...,valN    Write (int) 'val0' through 'valN' to consecutive addresses beginning at
+        #                                 address (int) 'regaddr'
+        "0x128+0xc0=1,0,1,0,2",
+        # regaddr+offset:size     Read (int) 'size' elements starting from (int) 'regaddr' + (int) 'offset'
+        "0x4000+15:0b1111",
+    ]
     errors = 0
     for _input, _expected in dd.items():
         try:
@@ -286,6 +288,17 @@ def test_parseTransaction():
             result = None
         if result != _expected:
             print("Failed on input: {}.\n  Expected: {}\n  Result:   {}".format(_input, _expected, result))
+            errors += 1
+
+    for _input in bads:
+        try:
+            result = parseTransaction(_input)
+            print(f"Expected an exception for input: { _input } but got {result}")
+            errors += 1
+        except ValueError:
+            pass
+        except Exception as ex:
+            print(f"Unexpected exception for input: { _input }: { ex }")
             errors += 1
     return errors
 
@@ -318,4 +331,8 @@ if __name__ == "__main__":
     parserTest = subparsers.add_parser("test", help="Run regression tests.")
     parserTest.set_defaults(handler=doTests)
     args = parser.parse_args()
-    sys.exit(args.handler(args))
+    try:
+        args.handler(args)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
