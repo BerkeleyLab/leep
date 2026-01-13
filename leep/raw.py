@@ -106,20 +106,12 @@ def yscale_rfs(wave_samp_per=1):
 
 
 def _int(s):
+    if isinstance(s, str) and (s.isdigit() or s.lower().startswith(('0x', '0b'))):
+        raise ValueError("Absolute numeric addressing is not allowed. Use symbolic register names instead.")
     try:
-        # Catch actual ints
         return int(s)
     except ValueError:
-        pass
-    if hasattr(s, 'startswith'):
-        try:
-            if s.startswith('0x'):
-                return int(s, 16)
-            elif s.startswith('0b'):
-                return int(s, 2)
-        except ValueError:
-            pass
-    return None
+        return None
 
 
 class LEEPDevice(DeviceBase):
@@ -176,9 +168,11 @@ class LEEPDevice(DeviceBase):
             "data_width": 32,
             "sign": "unsigned",
         }
+        if isinstance(reg, str) and (reg.isdigit() or reg.lower().startswith(('0x', '0b'))):
+            raise ValueError("Absolute numeric addressing is not allowed. Use symbolic register names instead.")
         _reg = _int(reg)
         if _reg is not None:
-            return "0x{:x}".format(_reg), _reg, 1, info
+            raise ValueError("Absolute numeric addressing is not allowed. Use symbolic register names instead.")
         if instance is not None:
             reg = self.expand_regname(reg, instance=instance)
         info = self.get_reg_info(reg, instance=None)

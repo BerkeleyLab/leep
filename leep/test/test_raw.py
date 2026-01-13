@@ -1,4 +1,3 @@
-
 import logging
 
 import unittest
@@ -195,15 +194,21 @@ def test_raw_int():
     from leep.raw import _int
     tests = {
         "foo": None,
-        "123": 123,
-        "0x100": 0x100,
-        "0b1000": 0b1000,
+        "123": 123,  # should raise error
+        "0x100": 0x100,  # should raise error
+        "0b1000": 0b1000,  # should raise error
         "0xreg": None,
         "0bentry": None,
     }
-    for key, val in tests.items():
-        if val != _int(key):
-            raise Exception("Test failed _int({}) = {} != {}".format(key, _int(key), val))
+    for key in tests:
+        try:
+            result = _int(key)
+            if result is not None:
+                print(f"Found passing absolute numeric address: {key} -> {result}")
+                raise Exception(f"Test failed _int({key}) = {result} (accepted when it shouldn't)")
+        except ValueError:
+            print(f"Expected ValueError for input '{key}' detected, as intended")
+            continue
     return True
 
 
