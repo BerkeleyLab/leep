@@ -309,6 +309,7 @@ class LEEPDevice(DeviceBase):
 
         if self.rfs:
             T, = self.reg_read(['dsp_tag'], instance=instance)
+            T = int(T)
             if tag or toggle_tag:
                 T = (T + 1) & 0xff
                 self.reg_write([('dsp_tag', T)], instance=instance)
@@ -350,8 +351,8 @@ class LEEPDevice(DeviceBase):
 
             if self.rfs:
                 slow, = self.reg_read(['slow_data'], instance=instance)
-                tag_old = slow[34]
-                tag_new = slow[33]
+                tag_old = int(slow[34])
+                tag_new = int(slow[33])
                 dT = (tag_old - T) & 0xff
                 tag_match = dT == 0 and tag_new == tag_old
 

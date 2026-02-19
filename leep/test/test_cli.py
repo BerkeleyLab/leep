@@ -293,12 +293,12 @@ def test_parseTransaction():
     for _input in bads:
         try:
             result = parseTransaction(_input)
-            print(f"Expected an exception for input: { _input } but got {result}")
+            print(f"Expected an exception for input: {_input} but got {result}")
             errors += 1
         except ValueError:
             pass
         except Exception as ex:
-            print(f"Unexpected exception for input: { _input }: { ex }")
+            print(f"Unexpected exception for input: {_input}: {ex}")
             errors += 1
     return errors
 
