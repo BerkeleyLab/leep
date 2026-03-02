@@ -45,7 +45,7 @@ class CADevice(DeviceBase):
     def __init__(self, addr, timeout=5.0, **kws):
         DeviceBase.__init__(self, **kws)
         self.timeout = timeout
-        assert self.timeout > 0.1, self.timeout  # must be reasonable
+        assert self.timeout >= 0.1, self.timeout  # must be reasonable
         self.prefix = str(addr)  # PV prefix
 
         # fetch mapping from register name to info dict
