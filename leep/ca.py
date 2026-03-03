@@ -201,6 +201,7 @@ class CADevice(DeviceBase):
 
         while True:
             slow = self._E.Wait(timeout=timeout)
+            slow = slow.astype(int)
             now = datetime.datetime.utcnow()
 
             tag_old = slow[34]
