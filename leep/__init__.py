@@ -1,5 +1,6 @@
 
 from .base import open, IGNORE, WARN, ERROR, RomError
+from .__version__ import __version__
 
 __all__ = [
     'open',
@@ -7,4 +8,5 @@ __all__ = [
     'WARN',
     'ERROR',
     'RomError',
+    '__version__'
 ]
