@@ -1,8 +1,10 @@
+from __future__ import annotations
 
 from .base import open, IGNORE, WARN, ERROR, RomError
-from .__version__ import __version__
+from ._version import __version__ as _version
 
 __all__ = [
+    '__version__',
     'open',
     'IGNORE',
     'WARN',
@@ -10,3 +12,5 @@ __all__ = [
     'RomError',
     '__version__'
 ]
+
+__version__: str = _version
