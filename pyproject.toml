@@ -31,4 +31,3 @@ Issues = "https://gitlab.lbl.gov/drivers/leep/issues"
 leep = "leep.cli:main"
 
 [tool.setuptools_scm]
-version_file = "leep/__version__.py"
