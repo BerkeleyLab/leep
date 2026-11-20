@@ -5,22 +5,21 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   test:
 
-    name: ${{ matrix.name }}
+    name: Test ${{ matrix.os }} with ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu latest with py3.x
-            os: ubuntu-latest
-            python: "3.x"
+          - os: ubuntu-26.04
+            python: "3.13"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
             python-version: ${{ matrix.python }}
 
@@ -46,7 +45,7 @@ jobs:
 
   release:
 
-    name: ${{ matrix.name }}
+    name: Release ${{ matrix.os }} with ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
     needs: test
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
@@ -55,15 +54,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu latest with py3.x
-            os: ubuntu-latest
-            python: "3.x"
+          - os: ubuntu-26.04
+            python: "3.13"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
             python-version: ${{ matrix.python }}
 
@@ -94,7 +92,7 @@ jobs:
       - name: Save artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: "leep ${{ matrix.name }}"
+          name: "leep ${{ matrix.os }} with ${{ matrix.python }}"
           path: dist/*
 
       - name: Check wheels
